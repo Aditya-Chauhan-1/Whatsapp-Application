@@ -119,6 +119,9 @@
             <button onclick="openLiveUsersDirectory()" title="Live Users Directory" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl text-wa-teal" id="liveUsersBtn">
               <i class="ph-bold ph-users-three"></i>
             </button>
+            <button onclick="openNewGroupModal()" title="New Group (One to Many)" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl text-emerald-400">
+              <i class="ph-bold ph-user-plus"></i>
+            </button>
             <button onclick="openStatusModal()" title="Status Stories" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl relative">
               <i class="ph-bold ph-circle-dashed"></i>
               <span id="storyDotBadge" class="hidden absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
@@ -137,6 +140,9 @@
               <div id="sidebarMenu" class="hidden absolute right-0 mt-2 w-52 bg-wa-panelDark border border-wa-borderDark rounded-xl shadow-2xl py-2 z-50 text-sm">
                 <button onclick="openLiveUsersDirectory()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-white flex items-center space-x-2">
                   <i class="ph ph-user-list text-base text-wa-teal"></i> <span>Online Users Network</span>
+                </button>
+                <button onclick="openNewGroupModal()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-emerald-400 flex items-center space-x-2">
+                  <i class="ph ph-users text-base"></i> <span>New Group (One-to-Many)</span>
                 </button>
                 <button onclick="openNewChatModal()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-white flex items-center space-x-2">
                   <i class="ph ph-user-plus text-base"></i> <span>Connect via Phone / ID</span>
@@ -390,6 +396,42 @@
     </div>
   </div>
 
+  <!-- NEW GROUP (ONE-TO-MANY) CREATION MODAL -->
+  <div id="newGroupModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6 flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-wa-borderDark">
+        <div class="flex items-center space-x-2">
+          <i class="ph-bold ph-users-three text-xl text-emerald-400"></i>
+          <h3 class="text-lg font-semibold text-white">Create Group (One-to-Many)</h3>
+        </div>
+        <button onclick="closeNewGroupModal()" class="text-wa-subtextDark hover:text-white">
+          <i class="ph-bold ph-x text-xl"></i>
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        <div>
+          <label class="text-xs text-wa-subtextDark block mb-1">Group Name *</label>
+          <input type="text" id="groupNameInput" placeholder="e.g. Project Alpha, Family, Dev Team" class="w-full bg-wa-bgDark text-white px-3.5 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        
+        <div>
+          <label class="text-xs text-wa-subtextDark block mb-1">Select Participants from Active Network</label>
+          <div id="groupParticipantsSelection" class="max-h-48 overflow-y-auto space-y-2 py-1 pr-1 border border-wa-borderDark rounded-xl p-2 bg-wa-bgDark/60">
+            <!-- Dynamic checkboxes for active peers -->
+          </div>
+        </div>
+
+        <div id="groupCreateError" class="hidden text-xs text-red-400 font-medium">Please enter a group name.</div>
+
+        <button onclick="submitCreateGroup()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-xl text-sm transition shadow mt-2 flex items-center justify-center space-x-2">
+          <i class="ph-bold ph-check"></i>
+          <span>Create & Launch Group</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- DIRECTORY MODAL: DISCOVER REAL REGISTERED USERS -->
   <div id="liveDirectoryModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-lg p-6 flex flex-col max-h-[85vh]">
@@ -629,6 +671,8 @@
     let registeredUsers = [];
     let conversations = [];
     let activeChatTargetId = null;
+    let isCurrentChatGroup = false;
+    let currentGroupData = null;
     let messagesListenerUnsub = null;
     let isConnectedToLive = false;
 
@@ -897,11 +941,13 @@
             renderLiveUsersDirectoryList();
           }
         } else if (data.type === 'NEW_LIVE_MESSAGE') {
-          if (data.recipientUid === currentUserUid) {
+          if (data.isGroup) {
+            handleIncomingLiveMessage(data);
+          } else if (data.recipientUid === currentUserUid) {
             handleIncomingLiveMessage(data);
           }
         } else if (data.type === 'REACTION_SYNC') {
-          if (activeChatTargetId && (data.recipientUid === currentUserUid || data.senderUid === currentUserUid)) {
+          if (activeChatTargetId && (data.recipientUid === currentUserUid || data.senderUid === currentUserUid || data.isGroup)) {
             refreshActiveChatMessages();
           }
         }
@@ -917,9 +963,12 @@
     }
 
     /* ==========================================================================
-       5. CHAT ROOM & MESSAGES STREAM
+       5. CHAT ROOM & MESSAGES STREAM (1-to-1 & 1-to-Many Groups)
        ========================================================================== */
-    function getRoomId(uidA, uidB) {
+    function getRoomId(uidA, uidB, isGroup = false) {
+      if (isGroup) {
+        return `group___${uidB}`;
+      }
       return [uidA, uidB].sort().join('___');
     }
 
@@ -927,13 +976,17 @@
       if (!targetUser || targetUser.uid === currentUserUid) return;
 
       activeChatTargetId = targetUser.uid;
+      isCurrentChatGroup = !!targetUser.isGroup;
+      currentGroupData = isCurrentChatGroup ? targetUser : null;
       
       // Update UI Header
       document.getElementById('emptyState').classList.add('hidden');
       document.getElementById('activeChatContainer').classList.remove('hidden');
       document.getElementById('activeChatName').innerText = targetUser.name || 'User';
-      document.getElementById('activeChatAvatar').src = targetUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop';
-      document.getElementById('activeChatStatus').innerText = targetUser.phone || 'Online';
+      document.getElementById('activeChatAvatar').src = targetUser.avatar || (isCurrentChatGroup ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100&h=100&fit=crop' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop');
+      document.getElementById('activeChatStatus').innerText = isCurrentChatGroup 
+        ? `${targetUser.members?.length || 2} participants (One-to-Many)` 
+        : (targetUser.phone || 'Online');
       document.getElementById('activeOnlineDot').classList.remove('hidden');
 
       if (window.innerWidth < 768) {
@@ -948,7 +1001,7 @@
       registerLocalConversation(targetUser);
 
       // Listen to room messages
-      bindRoomMessagesListener(targetUser.uid);
+      bindRoomMessagesListener(targetUser.uid, isCurrentChatGroup);
     };
 
     function registerLocalConversation(targetUser) {
@@ -957,10 +1010,12 @@
         const newConv = {
           targetUid: targetUser.uid,
           targetName: targetUser.name,
-          targetPhone: targetUser.phone,
-          targetAbout: targetUser.about || 'Available',
+          targetPhone: targetUser.phone || '',
+          targetAbout: targetUser.about || (targetUser.isGroup ? 'Group Conversation' : 'Available'),
           targetAvatar: targetUser.avatar,
-          lastMessage: 'Conversation started',
+          isGroup: !!targetUser.isGroup,
+          members: targetUser.members || [],
+          lastMessage: targetUser.isGroup ? 'Group created' : 'Conversation started',
           lastUpdated: Date.now(),
           unreadCount: 0
         };
@@ -974,18 +1029,18 @@
       }
     }
 
-    function bindRoomMessagesListener(targetUid) {
+    function bindRoomMessagesListener(targetUid, isGroup = false) {
       if (messagesListenerUnsub) {
         messagesListenerUnsub();
         messagesListenerUnsub = null;
       }
 
-      const roomId = getRoomId(currentUserUid, targetUid);
+      const roomId = getRoomId(currentUserUid, targetUid, isGroup);
       const messagesContainer = document.getElementById('messagesArea');
       messagesContainer.innerHTML = `
         <div class="flex items-center justify-center p-6 text-wa-subtextDark text-xs">
           <i class="ph ph-spinner-gap animate-spin text-xl text-wa-teal mr-2"></i>
-          <span>Loading end-to-end conversation...</span>
+          <span>Loading ${isGroup ? 'group room' : 'end-to-end'} messages...</span>
         </div>
       `;
 
@@ -1027,25 +1082,25 @@
     let localRoomMessages = {};
 
     function refreshActiveChatMessages() {
-      const roomId = getRoomId(currentUserUid, activeChatTargetId);
+      const roomId = getRoomId(currentUserUid, activeChatTargetId, isCurrentChatGroup);
       const msgs = localRoomMessages[roomId] || [];
       renderMessageBubbles(msgs);
     }
 
     function handleIncomingLiveMessage(data) {
-      const roomId = getRoomId(data.senderUid, data.recipientUid);
+      const roomId = getRoomId(data.senderUid, data.recipientUid, data.isGroup);
       if (!localRoomMessages[roomId]) localRoomMessages[roomId] = [];
       localRoomMessages[roomId].push(data.message);
 
       AudioEngine.playIncoming();
 
       // Check if this chat is active
-      if (activeChatTargetId === data.senderUid) {
+      if (activeChatTargetId === (data.isGroup ? data.recipientUid : data.senderUid)) {
         data.message.status = 'read';
         refreshActiveChatMessages();
       } else {
         // increment unread
-        const c = conversations.find(x => x.targetUid === data.senderUid);
+        const c = conversations.find(x => x.targetUid === (data.isGroup ? data.recipientUid : data.senderUid));
         if (c) c.unreadCount = (c.unreadCount || 0) + 1;
         renderConversationsList();
       }
@@ -1082,25 +1137,20 @@
         return `
           <div onclick="window.selectConversationByUid('${c.targetUid}')" class="flex items-center px-4 py-3 cursor-pointer transition ${isActive ? 'bg-wa-hoverDark' : 'hover:bg-wa-panelDark/60'}">
             <div class="relative flex-shrink-0 mr-3">
-              <img src="${c.targetAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'}" class="w-12 h-12 rounded-full object-cover">
-              <span class="absolute bottom-0 right-0 w-3 h-3 bg-wa-teal rounded-full ring-2 ring-wa-bgDark"></span>
+              <img src="${c.targetAvatar || (c.isGroup ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100&h=100&fit=crop' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop')}" class="w-12 h-12 rounded-full object-cover">
+              <span class="absolute bottom-0 right-0 w-3 h-3 ${c.isGroup ? 'bg-emerald-400' : 'bg-wa-teal'} rounded-full ring-2 ring-wa-bgDark"></span>
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex justify-between items-baseline mb-1">
-                <h4 class="text-sm font-semibold text-white truncate">${escapeHTML(c.targetName || 'User')}</h4>
-                <span class="text-xs ${c.unreadCount > 0 ? 'text-wa-teal font-medium' : 'text-wa-subtextDark'}">
-                  ${timeFormatted}
-                </span>
+                <div class="flex items-center space-x-1.5 truncate">
+                  ${c.isGroup ? '<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">Group</span>' : ''}
+                  <h4 class="text-sm font-medium text-white truncate">${c.targetName}</h4>
+                </div>
+                <span class="text-[11px] text-wa-subtextDark flex-shrink-0">${timeFormatted}</span>
               </div>
               <div class="flex justify-between items-center text-xs text-wa-subtextDark">
-                <p class="truncate flex items-center pr-2">
-                  <span class="truncate">${escapeHTML(c.lastMessage || '')}</span>
-                </p>
-                ${c.unreadCount > 0 ? `
-                  <span class="bg-wa-teal text-white font-bold rounded-full h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px]">
-                    ${c.unreadCount}
-                  </span>
-                ` : ''}
+                <p class="truncate text-wa-subtextDark/90 max-w-[200px]">${c.lastMessage || 'Tap to message'}</p>
+                ${(c.unreadCount && c.unreadCount > 0) ? `<span class="bg-wa-teal text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-4 text-center">${c.unreadCount}</span>` : ''}
               </div>
             </div>
           </div>
@@ -1112,121 +1162,84 @@
       const conv = conversations.find(c => c.targetUid === targetUid);
       if (conv) {
         conv.unreadCount = 0;
-        renderConversationsList();
-        openChatWithUser({
-          uid: conv.targetUid,
-          name: conv.targetName,
-          phone: conv.targetPhone,
-          about: conv.targetAbout,
-          avatar: conv.targetAvatar
-        });
+        openChatWithUser(conv);
       }
     };
 
     function renderMessageBubbles(messages) {
       const container = document.getElementById('messagesArea');
-      if (messages.length === 0) {
+      if (!messages || messages.length === 0) {
         container.innerHTML = `
-          <div class="flex flex-col items-center justify-center h-full text-center p-6 text-wa-subtextDark">
-            <span class="w-12 h-12 rounded-full bg-wa-panelDark flex items-center justify-center text-wa-teal text-xl mb-2">
-              <i class="ph-bold ph-lock-key"></i>
+          <div class="flex flex-col items-center justify-center h-full text-center p-6 text-wa-subtextDark text-xs">
+            <span class="bg-wa-panelDark px-3 py-1.5 rounded-lg border border-wa-borderDark shadow-sm">
+              <i class="ph-bold ph-lock-key text-wa-teal mr-1"></i> Messages are synchronized live across peers.
             </span>
-            <p class="text-xs max-w-xs leading-relaxed">
-              Messages are real-time synced. Say hello to initiate the conversation!
-            </p>
           </div>
         `;
         return;
       }
 
-      container.innerHTML = messages.map(m => {
-        const isMe = m.senderUid === currentUserUid;
+      container.innerHTML = messages.map(msg => {
+        const isMine = msg.senderUid === currentUserUid;
+        const timeStr = formatTime(msg.timestamp);
 
-        let checkmark = '';
-        if (isMe) {
-          if (m.status === 'read') {
-            checkmark = `<i class="ph-bold ph-checks text-[#53bdeb] text-sm"></i>`;
-          } else if (m.status === 'delivered') {
-            checkmark = `<i class="ph-bold ph-checks text-wa-subtextDark text-sm"></i>`;
-          } else {
-            checkmark = `<i class="ph-bold ph-check text-wa-subtextDark text-sm"></i>`;
-          }
+        // Tick Marks
+        let tickIcon = '<i class="ph ph-check text-xs text-gray-400"></i>';
+        if (msg.status === 'delivered') {
+          tickIcon = '<i class="ph-bold ph-checks text-xs text-gray-400"></i>';
+        } else if (msg.status === 'read') {
+          tickIcon = '<i class="ph-bold ph-checks text-xs text-sky-400"></i>';
         }
 
-        let mediaHtml = '';
-        if (m.media) {
-          if (m.media.type === 'image') {
-            mediaHtml = `
-              <div class="mb-1 rounded-lg overflow-hidden">
-                <img src="${m.media.url}" class="w-full max-h-72 object-cover rounded-lg">
-                ${m.media.caption ? `<p class="text-xs mt-1.5">${escapeHTML(m.media.caption)}</p>` : ''}
-              </div>
-            `;
-          } else if (m.media.type === 'location') {
-            mediaHtml = `
-              <div class="mb-1 rounded-lg bg-wa-bgDark p-2.5 border border-wa-borderDark flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-xl">
-                  <i class="ph-bold ph-map-pin"></i>
-                </div>
-                <div>
-                  <h5 class="text-xs font-semibold text-white">Live Shared Location</h5>
-                  <p class="text-[11px] text-wa-subtextDark">${escapeHTML(m.media.caption || 'Location Coordinates')}</p>
-                </div>
-              </div>
-            `;
-          }
-        }
+        // Reactions markup
+        const reactionMarkup = msg.reaction ? `
+          <div class="absolute -bottom-2 right-2 bg-wa-panelDark border border-wa-borderDark px-1.5 py-0.5 rounded-full text-xs shadow-md">
+            ${msg.reaction}
+          </div>
+        ` : '';
 
-        let audioHtml = '';
-        if (m.audio) {
-          audioHtml = `
-            <div class="flex items-center space-x-3 py-1 min-w-[210px]">
-              <button onclick="window.playAudioVoiceNote('${m.id}', '${m.audio.url || ''}')" id="playBtn_${m.id}" class="w-9 h-9 rounded-full bg-wa-teal text-white flex items-center justify-center flex-shrink-0 shadow">
-                <i class="ph-fill ph-play text-sm"></i>
-              </button>
-              <div class="flex-1">
-                <div class="h-1.5 w-full bg-wa-subtextDark/30 rounded-full overflow-hidden">
-                  <div id="audioProgress_${m.id}" class="h-full bg-wa-teal w-0 transition-all duration-100"></div>
-                </div>
-                <div class="flex justify-between text-[10px] text-wa-subtextDark mt-1 font-mono">
-                  <span>${m.audio.duration || '0:03'}</span>
-                  <span>Voice Note</span>
-                </div>
-              </div>
+        // Media content renderer
+        let contentMarkup = '';
+        if (msg.type === 'image') {
+          contentMarkup = `<img src="${msg.mediaUrl}" class="rounded-lg max-h-60 w-full object-cover mb-1.5">`;
+        } else if (msg.type === 'audio') {
+          contentMarkup = `
+            <div class="flex items-center space-x-2 py-1">
+              <button onclick="window.playAudioSnippet('${msg.mediaUrl}')" class="p-2 bg-wa-teal text-white rounded-full"><i class="ph-bold ph-play"></i></button>
+              <div class="h-1 flex-1 bg-white/20 rounded-full overflow-hidden"><div class="h-full bg-wa-teal w-2/3"></div></div>
+              <span class="text-[10px] text-wa-subtextDark">Voice note</span>
             </div>
           `;
-        }
-
-        let reactionsHtml = '';
-        if (m.reactions && m.reactions.length > 0) {
-          reactionsHtml = `
-            <div class="absolute -bottom-2.5 ${isMe ? 'right-2' : 'left-2'} bg-wa-panelDark border border-wa-borderDark px-2 py-0.5 rounded-full text-xs shadow-md flex items-center space-x-1">
-              ${m.reactions.map(r => `<span>${r}</span>`).join('')}
-            </div>
+        } else if (msg.type === 'location') {
+          contentMarkup = `
+            <a href="${msg.mapUrl}" target="_blank" class="flex items-center space-x-2 text-wa-tealLight underline text-xs pb-1">
+              <i class="ph-bold ph-map-pin text-base"></i>
+              <span>Live Location Shared</span>
+            </a>
           `;
         }
 
         return `
-          <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} group mb-3 relative">
-            <div class="relative max-w-[85%] md:max-w-[65%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${isMe ? 'bg-wa-bubbleOutDark text-[#e9edef] rounded-tr-none' : 'bg-wa-bubbleInDark text-[#e9edef] rounded-tl-none'}">
-              
-              <div class="hidden group-hover:flex absolute -top-8 ${isMe ? 'right-0' : 'left-0'} bg-wa-panelDark border border-wa-borderDark px-2 py-1 rounded-full shadow-lg items-center space-x-1.5 z-10 text-sm">
-                <button onclick="window.addReactionToMessage('${m.id}', '❤️')" class="hover:scale-125 transition">❤️</button>
-                <button onclick="window.addReactionToMessage('${m.id}', '👍')" class="hover:scale-125 transition">👍</button>
-                <button onclick="window.addReactionToMessage('${m.id}', '😂')" class="hover:scale-125 transition">😂</button>
-                <button onclick="window.addReactionToMessage('${m.id}', '🔥')" class="hover:scale-125 transition">🔥</button>
+          <div class="flex flex-col ${isMine ? 'items-end' : 'items-start'} group relative">
+            <div class="max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 shadow-sm text-sm relative ${
+              isMine ? 'bg-wa-bubbleOutDark text-[#e9edef] rounded-tr-none' : 'bg-wa-bubbleInDark text-[#e9edef] rounded-tl-none'
+            }">
+              ${isCurrentChatGroup && !isMine ? `<div class="text-[11px] font-bold text-emerald-400 mb-0.5">${msg.senderName || 'Peer'}</div>` : ''}
+              ${contentMarkup}
+              <div class="break-words leading-relaxed">${escapeHtml(msg.text || '')}</div>
+              <div class="flex items-center justify-end space-x-1 mt-1 text-[10px] text-wa-subtextDark">
+                <span>${timeStr}</span>
+                ${isMine ? tickIcon : ''}
               </div>
+              ${reactionMarkup}
+            </div>
 
-              ${mediaHtml}
-              ${audioHtml}
-              ${m.text ? `<p class="leading-relaxed whitespace-pre-wrap select-text">${escapeHTML(m.text)}</p>` : ''}
-              
-              <div class="flex items-center justify-end space-x-1.5 mt-1 text-[11px] text-wa-subtextDark select-none">
-                <span>${m.timestamp ? formatTime(m.timestamp) : ''}</span>
-                ${checkmark}
-              </div>
-
-              ${reactionsHtml}
+            <!-- Hover Quick Reaction Bar -->
+            <div class="hidden group-hover:flex items-center space-x-1 bg-wa-panelDark border border-wa-borderDark px-2 py-0.5 rounded-full absolute -top-3 ${isMine ? 'right-0' : 'left-0'} shadow-lg z-10 text-xs">
+              <button onclick="window.addReactionToMessage('${msg.id}', '👍')">👍</button>
+              <button onclick="window.addReactionToMessage('${msg.id}', '❤️')">❤️</button>
+              <button onclick="window.addReactionToMessage('${msg.id}', '😂')">😂</button>
+              <button onclick="window.addReactionToMessage('${msg.id}', '🔥')">🔥</button>
             </div>
           </div>
         `;
@@ -1236,177 +1249,223 @@
     }
 
     /* ==========================================================================
-       7. SENDING LIVE MESSAGES
+       7. SENDING MESSAGES (REAL-TIME 1-TO-1 & 1-TO-MANY)
        ========================================================================== */
     window.handleSendAction = async function() {
       const input = document.getElementById('messageTextInput');
       const text = input.value.trim();
 
-      if (window.selectedAttachmentData) {
-        await dispatchLiveMessage({
-          media: window.selectedAttachmentData,
-          text: text
-        });
-        window.cancelAttachment();
-        input.value = '';
-        updateSendIcon();
+      if (!text && !pendingAttachment && !pendingVoiceNote) {
+        // Start live microphone voice recorder if text is empty
+        startVoiceRecording();
         return;
       }
 
-      if (text.length > 0) {
-        await dispatchLiveMessage({ text: text });
-        input.value = '';
-        updateSendIcon();
-        input.focus();
+      if (!activeChatTargetId) {
+        showToast('Please open or select a conversation first');
         return;
       }
 
-      window.startVoiceRecording();
-    };
+      const roomId = getRoomId(currentUserUid, activeChatTargetId, isCurrentChatGroup);
+      const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
 
-    async function dispatchLiveMessage(payload) {
-      if (!activeChatTargetId || !currentUserUid) return;
-
-      const roomId = getRoomId(currentUserUid, activeChatTargetId);
-      const msgId = 'msg_' + Date.now();
-      const newMsg = {
+      const messagePayload = {
+        id: msgId,
         senderUid: currentUserUid,
         senderName: currentProfile.name,
+        senderPhone: currentProfile.phone,
         recipientUid: activeChatTargetId,
+        isGroup: isCurrentChatGroup,
+        text: text,
+        type: pendingAttachment ? pendingAttachment.type : (pendingVoiceNote ? 'audio' : 'text'),
+        mediaUrl: pendingAttachment ? pendingAttachment.url : (pendingVoiceNote || ''),
+        mapUrl: pendingAttachment?.mapUrl || '',
         timestamp: Date.now(),
         status: 'delivered',
-        reactions: [],
-        ...payload
+        reaction: null
       };
 
+      // Play local pop tone
       AudioEngine.playPop();
 
-      // Update Local conversation status immediately
-      const summaryText = payload.text || (payload.media ? 'Media photo' : 'Voice note');
-      const targetUser = registeredUsers.find(u => u.uid === activeChatTargetId) || {
-        uid: activeChatTargetId,
-        name: document.getElementById('activeChatName').innerText,
-        avatar: document.getElementById('activeChatAvatar').src
-      };
+      // Clear input & attachments
+      input.value = '';
+      cancelAttachment();
+      pendingVoiceNote = null;
+      document.getElementById('sendActionIcon').className = 'ph-bold ph-microphone';
 
-      const convIndex = conversations.findIndex(c => c.targetUid === activeChatTargetId);
-      if (convIndex > -1) {
-        conversations[convIndex].lastMessage = summaryText;
-        conversations[convIndex].lastUpdated = Date.now();
-      } else {
-        conversations.unshift({
-          targetUid: activeChatTargetId,
-          targetName: targetUser.name,
-          targetPhone: targetUser.phone || '',
-          targetAvatar: targetUser.avatar || '',
-          lastMessage: summaryText,
-          lastUpdated: Date.now(),
-          unreadCount: 0
-        });
-      }
-      renderConversationsList();
-
-      // Fallback local memory save
-      if (!localRoomMessages[roomId]) localRoomMessages[roomId] = [];
-      localRoomMessages[roomId].push(newMsg);
-      refreshActiveChatMessages();
-
-      // Post to broadcast channel for multi-tab sync
+      // 1. Broadcast to local tab network
       APP_CHANNEL.postMessage({
         type: 'NEW_LIVE_MESSAGE',
-        senderUid: currentUserUid,
-        recipientUid: activeChatTargetId,
-        message: newMsg
+        ...messagePayload,
+        message: messagePayload
       });
 
-      // Push to Firestore Cloud
+      // 2. Save directly to Cloud Room
       if (db) {
         try {
           const msgRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', msgId);
-          await setDoc(msgRef, newMsg);
+          await setDoc(msgRef, messagePayload);
 
-          // Update Sender's conversation record
-          const senderConvRef = doc(db, 'artifacts', appId, 'users', currentUserUid, 'chats', activeChatTargetId);
-          await setDoc(senderConvRef, {
+          // Update Sender's chat summary
+          const senderChatRef = doc(db, 'artifacts', appId, 'users', currentUserUid, 'chats', activeChatTargetId);
+          await setDoc(senderChatRef, {
             targetUid: activeChatTargetId,
-            targetName: targetUser.name || 'User',
-            targetPhone: targetUser.phone || '',
-            targetAvatar: targetUser.avatar || '',
-            lastMessage: summaryText,
-            lastUpdated: Date.now(),
-            unreadCount: 0
+            targetName: document.getElementById('activeChatName').innerText,
+            lastMessage: text || (messagePayload.type === 'image' ? '📷 Photo' : '🎤 Voice note'),
+            lastUpdated: Date.now()
           }, { merge: true });
 
-          // Update Recipient's conversation record
-          const recipientConvRef = doc(db, 'artifacts', appId, 'users', activeChatTargetId, 'chats', currentUserUid);
-          await setDoc(recipientConvRef, {
-            targetUid: currentUserUid,
-            targetName: currentProfile.name,
-            targetPhone: currentProfile.phone,
-            targetAvatar: currentProfile.avatar,
-            lastMessage: summaryText,
-            lastUpdated: Date.now(),
-            unreadCount: 1
-          }, { merge: true });
-
-        } catch (err) {
-          console.warn("Cloud push warning:", err);
+          // If 1-to-1, update Recipient's chat summary
+          if (!isCurrentChatGroup) {
+            const recipientChatRef = doc(db, 'artifacts', appId, 'users', activeChatTargetId, 'chats', currentUserUid);
+            await setDoc(recipientChatRef, {
+              targetUid: currentUserUid,
+              targetName: currentProfile.name,
+              targetPhone: currentProfile.phone,
+              targetAvatar: currentProfile.avatar,
+              lastMessage: text || (messagePayload.type === 'image' ? '📷 Photo' : '🎤 Voice note'),
+              lastUpdated: Date.now(),
+              unreadCount: 1
+            }, { merge: true });
+          }
+        } catch(e) {
+          console.warn("Real-time cloud message dispatch:", e);
         }
-      }
-    }
-
-    window.addReactionToMessage = async function(msgId, emoji) {
-      if (!activeChatTargetId || !currentUserUid) return;
-      const roomId = getRoomId(currentUserUid, activeChatTargetId);
-
-      // In local cache
-      const list = localRoomMessages[roomId] || [];
-      const msg = list.find(m => m.id === msgId);
-      if (msg) {
-        if (!msg.reactions) msg.reactions = [];
-        const idx = msg.reactions.indexOf(emoji);
-        if (idx > -1) msg.reactions.splice(idx, 1);
-        else msg.reactions.push(emoji);
+      } else {
+        if (!localRoomMessages[roomId]) localRoomMessages[roomId] = [];
+        localRoomMessages[roomId].push(messagePayload);
         refreshActiveChatMessages();
+      }
+    };
+
+    window.addReactionToMessage = async function(msgId, reactionEmoji) {
+      if (!activeChatTargetId || !msgId) return;
+      const roomId = getRoomId(currentUserUid, activeChatTargetId, isCurrentChatGroup);
+
+      if (db) {
+        try {
+          const msgRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', msgId);
+          await updateDoc(msgRef, { reaction: reactionEmoji });
+        } catch(e) {}
+      } else {
+        const msgs = localRoomMessages[roomId] || [];
+        const target = msgs.find(m => m.id === msgId);
+        if (target) {
+          target.reaction = reactionEmoji;
+          refreshActiveChatMessages();
+        }
       }
 
       APP_CHANNEL.postMessage({
         type: 'REACTION_SYNC',
         senderUid: currentUserUid,
-        recipientUid: activeChatTargetId
+        recipientUid: activeChatTargetId,
+        isGroup: isCurrentChatGroup
       });
-
-      if (db) {
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', msgId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const data = snap.data();
-            let current = data.reactions || [];
-            const idx = current.indexOf(emoji);
-            if (idx > -1) current.splice(idx, 1);
-            else current.push(emoji);
-            await updateDoc(docRef, { reactions: current });
-          }
-        } catch(e){}
-      }
     };
 
     /* ==========================================================================
-       8. LIVE USERS DISCOVERY DIRECTORY
+       8. REAL-TIME PHONE NUMBER LOOKUP / SEARCH (ONE-TO-ONE)
+       ========================================================================== */
+    window.initiateChatWithTarget = function() {
+      const input = document.getElementById('targetContactIdentifier').value.trim();
+      const customName = document.getElementById('targetContactDisplayName').value.trim();
+
+      if (!input) {
+        document.getElementById('newChatError').classList.remove('hidden');
+        return;
+      }
+
+      // Check if user is in registered list by phone or UID
+      const cleanInput = input.replace(/\s+/g, '').toLowerCase();
+      let matched = registeredUsers.find(u => {
+        const p = (u.phone || '').replace(/\s+/g, '').toLowerCase();
+        const id = (u.uid || '').toLowerCase();
+        return p === cleanInput || id === cleanInput;
+      });
+
+      if (!matched) {
+        // Create an open dynamic contact with this phone / ID
+        matched = {
+          uid: 'usr_' + input.replace(/[^a-zA-Z0-9]/g, '_'),
+          name: customName || `User (${input})`,
+          phone: input,
+          about: 'Connected via Phone Number',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop',
+          isGroup: false
+        };
+      }
+
+      openChatWithUser(matched);
+      showToast(`Conversation started with ${matched.name}!`);
+    };
+
+    /* ==========================================================================
+       9. ONE-TO-MANY (GROUP CHAT) LOGIC
+       ========================================================================== */
+    window.openNewGroupModal = function() {
+      const container = document.getElementById('groupParticipantsSelection');
+      if (registeredUsers.length === 0) {
+        container.innerHTML = `<p class="text-xs text-wa-subtextDark p-2">No other active peers online yet. Open another tab to connect real users!</p>`;
+      } else {
+        container.innerHTML = registeredUsers.map(user => `
+          <label class="flex items-center space-x-3 p-2 hover:bg-wa-hoverDark rounded-lg cursor-pointer">
+            <input type="checkbox" value="${user.uid}" class="rounded text-wa-teal focus:ring-0 group-peer-checkbox">
+            <img src="${user.avatar}" class="w-7 h-7 rounded-full object-cover">
+            <div class="text-xs">
+              <span class="text-white font-medium block">${user.name}</span>
+              <span class="text-wa-subtextDark">${user.phone}</span>
+            </div>
+          </label>
+        `).join('');
+      }
+      document.getElementById('newGroupModal').classList.remove('hidden');
+    };
+
+    window.closeNewGroupModal = function() {
+      document.getElementById('newGroupModal').classList.add('hidden');
+      document.getElementById('groupNameInput').value = '';
+    };
+
+    window.submitCreateGroup = function() {
+      const name = document.getElementById('groupNameInput').value.trim();
+      if (!name) {
+        document.getElementById('groupCreateError').classList.remove('hidden');
+        return;
+      }
+
+      const checkboxes = document.querySelectorAll('.group-peer-checkbox:checked');
+      const selectedUids = Array.from(checkboxes).map(cb => cb.value);
+      selectedUids.push(currentUserUid);
+
+      const groupId = 'grp_' + Date.now();
+      const groupData = {
+        uid: groupId,
+        name: name,
+        isGroup: true,
+        phone: `${selectedUids.length} members`,
+        avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=120&h=120&fit=crop',
+        members: selectedUids,
+        createdBy: currentUserUid,
+        about: `Group: ${name}`
+      };
+
+      closeNewGroupModal();
+      openChatWithUser(groupData);
+      showToast(`Group "${name}" created with ${selectedUids.length} participants!`);
+    };
+
+    /* ==========================================================================
+       10. ACTIVE USERS DIRECTORY (DISCOVER REAL PEERS)
        ========================================================================== */
     window.openLiveUsersDirectory = function() {
-      document.getElementById('liveDirectoryModal').classList.remove('hidden');
       renderLiveUsersDirectoryList();
+      document.getElementById('liveDirectoryModal').classList.remove('hidden');
     };
 
     window.closeLiveUsersDirectory = function() {
       document.getElementById('liveDirectoryModal').classList.add('hidden');
-    };
-
-    window.fetchRegisteredUsersLive = function() {
-      renderLiveUsersDirectoryList();
-      showToast("Directory refreshed with active peers.");
     };
 
     function renderLiveUsersDirectoryList() {
@@ -1416,68 +1475,184 @@
       if (registeredUsers.length === 0) {
         container.innerHTML = `
           <div class="p-6 text-center text-wa-subtextDark text-xs">
-            <p>No other active users detected right now.</p>
-            <p class="mt-1 text-gray-400">Open this app in an incognito window or share your Link/Phone to test real messaging!</p>
+            <i class="ph ph-broadcast text-2xl text-wa-teal mb-2 block mx-auto"></i>
+            <p>Waiting for other peers to join...</p>
+            <p class="text-[11px] text-gray-500 mt-1">Open this link in another tab or device to chat in real time!</p>
           </div>
         `;
         return;
       }
 
-      container.innerHTML = registeredUsers.map(user => {
-        return `
-          <div onclick="window.startChatFromDirectory('${user.uid}')" class="flex items-center justify-between p-3 hover:bg-wa-hoverDark rounded-xl cursor-pointer transition">
-            <div class="flex items-center space-x-3">
-              <div class="relative">
-                <img src="${user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'}" class="w-10 h-10 rounded-full object-cover">
-                <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
-              </div>
-              <div>
-                <h4 class="text-sm font-semibold text-white leading-tight">${escapeHTML(user.name || 'User')}</h4>
-                <p class="text-xs text-wa-subtextDark font-mono">${escapeHTML(user.phone || '')}</p>
-                <p class="text-[11px] text-gray-400 truncate max-w-xs">${escapeHTML(user.about || '')}</p>
-              </div>
+      container.innerHTML = registeredUsers.map(user => `
+        <div onclick='window.openChatWithUser(${JSON.stringify(user)})' class="flex items-center justify-between p-3 hover:bg-wa-hoverDark rounded-xl cursor-pointer transition">
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <img src="${user.avatar}" class="w-10 h-10 rounded-full object-cover">
+              <span class="w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark absolute bottom-0 right-0"></span>
             </div>
-            <button class="px-3 py-1 bg-wa-teal text-white rounded-lg text-xs font-semibold hover:bg-wa-tealDark transition flex items-center space-x-1">
-              <i class="ph-bold ph-chat-text"></i>
-              <span>Chat</span>
-            </button>
+            <div>
+              <h4 class="text-sm font-semibold text-white leading-tight">${user.name}</h4>
+              <p class="text-xs text-wa-teal font-mono">${user.phone}</p>
+              <p class="text-[11px] text-wa-subtextDark truncate max-w-xs">${user.about || 'Available'}</p>
+            </div>
           </div>
-        `;
-      }).join('');
-    }
-
-    window.startChatFromDirectory = function(uid) {
-      const user = registeredUsers.find(u => u.uid === uid);
-      if (user) {
-        openChatWithUser(user);
-      }
-    };
-
-    /* ==========================================================================
-       9. LIVE STATUS & STORIES ENGINE
-       ========================================================================== */
-    let currentStories = [];
-    let activeStoryIdx = 0;
-    let storyTimeoutTimer = null;
-    let selectedStoryBgClass = 'from-emerald-500 to-teal-800';
-
-    function renderStories(list) {
-      currentStories = list;
-      const container = document.getElementById('storiesContainer');
-      const dotBadge = document.getElementById('storyDotBadge');
-
-      if (list.length > 0) dotBadge.classList.remove('hidden');
-      else dotBadge.classList.add('hidden');
-
-      container.innerHTML = list.map((s, idx) => `
-        <div class="flex flex-col items-center flex-shrink-0 cursor-pointer group" onclick="window.viewStoryLive(${idx})">
-          <div class="w-12 h-12 rounded-full p-[2px] bg-gradient-to-tr from-wa-teal via-emerald-400 to-wa-tealLight group-hover:scale-105 transition-transform">
-            <img src="${s.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop'}" class="w-full h-full rounded-full object-cover ring-2 ring-wa-bgDark">
-          </div>
-          <span class="text-[11px] mt-1 text-wa-subtextDark group-hover:text-white truncate max-w-[56px]">${escapeHTML((s.name || 'User').split(' ')[0])}</span>
+          <button class="px-3 py-1 bg-wa-teal/20 text-wa-teal rounded-lg text-xs font-semibold hover:bg-wa-teal/30">
+            Chat Live
+          </button>
         </div>
       `).join('');
     }
+
+    /* ==========================================================================
+       11. REAL VOICE RECORDING (MediaRecorder API)
+       ========================================================================== */
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordingTimerInterval = null;
+    let pendingVoiceNote = null;
+
+    async function startVoiceRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            pendingVoiceNote = reader.result;
+            handleSendAction();
+          };
+          reader.readAsDataURL(audioBlob);
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        document.getElementById('recordingBanner').classList.remove('hidden');
+
+        let seconds = 0;
+        document.getElementById('recordingTimer').innerText = '0:00';
+        recordingTimerInterval = setInterval(() => {
+          seconds++;
+          const mins = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          document.getElementById('recordingTimer').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }, 1000);
+      } catch (err) {
+        showToast('Microphone access denied or unsupported');
+      }
+    }
+
+    window.stopAndSendVoiceRecording = function() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      clearInterval(recordingTimerInterval);
+      document.getElementById('recordingBanner').classList.add('hidden');
+    };
+
+    window.cancelVoiceRecording = function() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      clearInterval(recordingTimerInterval);
+      audioChunks = [];
+      pendingVoiceNote = null;
+      document.getElementById('recordingBanner').classList.add('hidden');
+    };
+
+    window.playAudioSnippet = function(url) {
+      if (!url) return;
+      const audio = new Audio(url);
+      audio.play().catch(()=>{});
+    };
+
+    /* ==========================================================================
+       12. ATTACHMENTS, MEDIA, LOCATION & CONTACT CARD
+       ========================================================================== */
+    let pendingAttachment = null;
+
+    window.toggleAttachmentMenu = function() {
+      const menu = document.getElementById('attachmentMenu');
+      menu.classList.toggle('hidden');
+    };
+
+    window.triggerFileInput = function(acceptType) {
+      const input = document.getElementById('hiddenFileInput');
+      input.accept = acceptType;
+      input.click();
+      document.getElementById('attachmentMenu').classList.add('hidden');
+    };
+
+    window.handleFileSelection = function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        pendingAttachment = {
+          type: 'image',
+          name: file.name,
+          url: e.target.result
+        };
+        showAttachmentPreview(file.name, e.target.result);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    function showAttachmentPreview(name, thumbUrl) {
+      const box = document.getElementById('attachmentPreview');
+      document.getElementById('previewMediaTitle').innerText = name;
+      document.getElementById('previewMediaThumb').innerHTML = `<img src="${thumbUrl}" class="w-full h-full object-cover">`;
+      box.classList.remove('hidden');
+      document.getElementById('sendActionIcon').className = 'ph-bold ph-paper-plane-right';
+    }
+
+    window.cancelAttachment = function() {
+      pendingAttachment = null;
+      document.getElementById('attachmentPreview').classList.add('hidden');
+      document.getElementById('hiddenFileInput').value = '';
+    };
+
+    window.shareLiveLocation = function() {
+      document.getElementById('attachmentMenu').classList.add('hidden');
+      if (!navigator.geolocation) {
+        showToast('Geolocation is not supported by your browser');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        pendingAttachment = {
+          type: 'location',
+          mapUrl: `https://www.google.com/maps?q=${lat},${lng}`,
+          url: ''
+        };
+        document.getElementById('messageTextInput').value = `📍 Shared live GPS location: (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        handleSendAction();
+      }, () => {
+        showToast('Could not retrieve current GPS position');
+      });
+    };
+
+    window.shareMyContactCard = function() {
+      document.getElementById('attachmentMenu').classList.add('hidden');
+      if (!currentProfile) return;
+      document.getElementById('messageTextInput').value = `👤 Contact Card: ${currentProfile.name} | 📞 ${currentProfile.phone}`;
+      handleSendAction();
+    };
+
+    /* ==========================================================================
+       13. STORIES / STATUS POSTING & VIEWING
+       ========================================================================== */
+    let currentStories = [];
+    let selectedStoryBg = 'bg-gradient-to-r from-emerald-500 to-teal-800';
 
     window.openCreateStoryModal = function() {
       document.getElementById('createStoryModal').classList.remove('hidden');
@@ -1488,396 +1663,225 @@
     };
 
     window.selectStoryBg = function(type) {
-      if (type === 'gradient-1') selectedStoryBgClass = 'from-emerald-500 to-teal-800';
-      if (type === 'gradient-2') selectedStoryBgClass = 'from-purple-600 to-indigo-900';
-      if (type === 'gradient-3') selectedStoryBgClass = 'from-rose-500 to-amber-700';
-      if (type === 'gradient-4') selectedStoryBgClass = 'from-cyan-600 to-blue-900';
+      if (type === 'gradient-1') selectedStoryBg = 'bg-gradient-to-r from-emerald-500 to-teal-800';
+      if (type === 'gradient-2') selectedStoryBg = 'bg-gradient-to-r from-purple-600 to-indigo-900';
+      if (type === 'gradient-3') selectedStoryBg = 'bg-gradient-to-r from-rose-500 to-amber-700';
+      if (type === 'gradient-4') selectedStoryBg = 'bg-gradient-to-r from-cyan-600 to-blue-900';
     };
 
     window.publishStoryLive = async function() {
       const caption = document.getElementById('storyTextCaption').value.trim();
-      if (!caption || !currentProfile) return;
+      if (!caption) return;
 
-      const newStory = {
-        id: 'story_' + Date.now(),
+      const storyId = 'story_' + Date.now();
+      const storyData = {
+        id: storyId,
         authorUid: currentUserUid,
-        name: currentProfile.name,
-        avatar: currentProfile.avatar,
+        authorName: currentProfile.name,
+        authorAvatar: currentProfile.avatar,
         caption: caption,
-        bg: selectedStoryBgClass,
+        bgClass: selectedStoryBg,
         timestamp: Date.now()
       };
 
       if (db) {
         try {
-          const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'stories', newStory.id);
-          await setDoc(sRef, newStory);
+          const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'stories', storyId);
+          await setDoc(sRef, storyData);
         } catch(e){}
-      } else {
-        currentStories.unshift(newStory);
-        renderStories(currentStories);
       }
 
       closeCreateStoryModal();
       document.getElementById('storyTextCaption').value = '';
-      showToast("Live story posted to status network!");
+      showToast('Status published live to all users!');
     };
 
-    window.viewStoryLive = function(idx) {
-      if (!currentStories[idx]) return;
-      activeStoryIdx = idx;
-      const s = currentStories[idx];
+    function renderStories(storiesList) {
+      currentStories = storiesList || [];
+      const container = document.getElementById('storiesContainer');
+      if (!container) return;
+
+      container.innerHTML = currentStories.map((story, i) => `
+        <div class="flex flex-col items-center flex-shrink-0 cursor-pointer" onclick="window.viewStoryIndex(${i})">
+          <div class="relative w-12 h-12 rounded-full p-0.5 ring-2 ring-wa-teal">
+            <img src="${story.authorAvatar}" class="w-full h-full rounded-full object-cover">
+          </div>
+          <span class="text-[11px] mt-1 text-white truncate max-w-[56px]">${story.authorName.split(' ')[0]}</span>
+        </div>
+      `).join('');
+    }
+
+    let storyTimer = null;
+    window.viewStoryIndex = function(index) {
+      const story = currentStories[index];
+      if (!story) return;
 
       const modal = document.getElementById('storyViewerModal');
       const card = document.getElementById('storyContentCard');
-      document.getElementById('storyViewerAvatar').src = s.avatar;
-      document.getElementById('storyViewerName').innerText = s.name;
-      document.getElementById('storyViewerTime').innerText = formatTime(s.timestamp || Date.now());
-      document.getElementById('storyViewerCaption').innerText = s.caption;
-
-      card.className = `max-w-md w-full h-[85vh] flex flex-col justify-between p-6 relative rounded-2xl overflow-hidden border border-wa-borderDark bg-gradient-to-br ${s.bg}`;
-      modal.classList.remove('hidden');
-
       const bar = document.getElementById('storyProgressBar');
-      bar.style.width = '0%';
-      setTimeout(() => { bar.style.width = '100%'; }, 50);
 
-      clearTimeout(storyTimeoutTimer);
-      storyTimeoutTimer = setTimeout(() => {
-        if (activeStoryIdx < currentStories.length - 1) {
-          viewStoryLive(activeStoryIdx + 1);
-        } else {
-          closeStoryViewer();
-        }
+      card.className = `max-w-md w-full h-[85vh] flex flex-col justify-between p-6 relative rounded-2xl overflow-hidden border border-wa-borderDark ${story.bgClass || 'bg-teal-900'}`;
+      document.getElementById('storyViewerAvatar').src = story.authorAvatar;
+      document.getElementById('storyViewerName').innerText = story.authorName;
+      document.getElementById('storyViewerTime').innerText = formatTime(story.timestamp);
+      document.getElementById('storyViewerCaption').innerText = story.caption;
+
+      modal.classList.remove('hidden');
+      bar.style.width = '0%';
+      setTimeout(() => bar.style.width = '100%', 50);
+
+      clearTimeout(storyTimer);
+      storyTimer = setTimeout(() => {
+        closeStoryViewer();
       }, 4000);
     };
 
     window.closeStoryViewer = function() {
-      clearTimeout(storyTimeoutTimer);
+      clearTimeout(storyTimer);
       document.getElementById('storyViewerModal').classList.add('hidden');
-      document.getElementById('storyProgressBar').style.width = '0%';
     };
 
     /* ==========================================================================
-       10. REAL VOICE RECORDER & PLAYBACK (WITH WEBM/WAV BLOB)
-       ========================================================================== */
-    let mediaRecorder = null;
-    let audioChunks = [];
-    let isRecordingAudio = false;
-    let recordingTimerInterval = null;
-    let recordingDurationSec = 0;
-
-    window.startVoiceRecording = async function() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = e => {
-          if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
-        mediaRecorder.start();
-        isRecordingAudio = true;
-        recordingDurationSec = 0;
-
-        document.getElementById('recordingBanner').classList.remove('hidden');
-        document.getElementById('chatInputFooter').classList.add('hidden');
-
-        recordingTimerInterval = setInterval(() => {
-          recordingDurationSec++;
-          const min = Math.floor(recordingDurationSec / 60);
-          const sec = recordingDurationSec % 60;
-          document.getElementById('recordingTimer').innerText = `${min}:${sec < 10 ? '0' : ''}${sec}`;
-        }, 1000);
-      } catch (err) {
-        // Fallback simulation if microphone permission denied
-        simulateMicFallback();
-      }
-    };
-
-    function simulateMicFallback() {
-      isRecordingAudio = true;
-      recordingDurationSec = 0;
-      document.getElementById('recordingBanner').classList.remove('hidden');
-      document.getElementById('chatInputFooter').classList.add('hidden');
-
-      recordingTimerInterval = setInterval(() => {
-        recordingDurationSec++;
-        const min = Math.floor(recordingDurationSec / 60);
-        const sec = recordingDurationSec % 60;
-        document.getElementById('recordingTimer').innerText = `${min}:${sec < 10 ? '0' : ''}${sec}`;
-      }, 1000);
-    }
-
-    window.cancelVoiceRecording = function() {
-      clearInterval(recordingTimerInterval);
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-      }
-      isRecordingAudio = false;
-      document.getElementById('recordingBanner').classList.add('hidden');
-      document.getElementById('chatInputFooter').classList.remove('hidden');
-    };
-
-    window.stopAndSendVoiceRecording = function() {
-      clearInterval(recordingTimerInterval);
-      const formatted = `${Math.floor(recordingDurationSec / 60)}:${(recordingDurationSec % 60) < 10 ? '0' : ''}${recordingDurationSec % 60}`;
-      
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(audioChunks, { type: 'audio/webm' });
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            dispatchLiveMessage({
-              audio: {
-                duration: formatted,
-                url: e.target.result
-              }
-            });
-          };
-          reader.readAsDataURL(blob);
-        };
-        mediaRecorder.stop();
-      } else {
-        dispatchLiveMessage({
-          audio: { duration: formatted === '0:00' ? '0:04' : formatted }
-        });
-      }
-
-      isRecordingAudio = false;
-      document.getElementById('recordingBanner').classList.add('hidden');
-      document.getElementById('chatInputFooter').classList.remove('hidden');
-    };
-
-    window.playAudioVoiceNote = function(msgId, dataUrl) {
-      const progressBar = document.getElementById(`audioProgress_${msgId}`);
-      const btn = document.getElementById(`playBtn_${msgId}`);
-      if (!progressBar || !btn) return;
-
-      btn.innerHTML = `<i class="ph-fill ph-pause text-sm"></i>`;
-      progressBar.style.width = '0%';
-
-      if (dataUrl && dataUrl.startsWith('data:audio')) {
-        const audio = new Audio(dataUrl);
-        audio.play().catch(()=>{});
-        audio.ontimeupdate = () => {
-          if (audio.duration) {
-            progressBar.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
-          }
-        };
-        audio.onended = () => {
-          btn.innerHTML = `<i class="ph-fill ph-play text-sm"></i>`;
-          progressBar.style.width = '0%';
-        };
-      } else {
-        AudioEngine.playPop();
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += 5;
-          progressBar.style.width = progress + '%';
-          if (progress >= 100) {
-            clearInterval(interval);
-            btn.innerHTML = `<i class="ph-fill ph-play text-sm"></i>`;
-            setTimeout(() => { progressBar.style.width = '0%'; }, 400);
-          }
-        }, 90);
-      }
-    };
-
-    /* ==========================================================================
-       11. ATTACHMENT, LOCATION & NEW CONTACT ACTIONS
-       ========================================================================== */
-    window.selectedAttachmentData = null;
-
-    window.toggleAttachmentMenu = function() {
-      document.getElementById('attachmentMenu').classList.toggle('hidden');
-    };
-
-    window.triggerFileInput = function(accept) {
-      const input = document.getElementById('hiddenFileInput');
-      input.accept = accept;
-      input.click();
-      document.getElementById('attachmentMenu').classList.add('hidden');
-    };
-
-    window.handleFileSelection = function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        window.selectedAttachmentData = {
-          type: file.type.startsWith('image') ? 'image' : 'file',
-          url: event.target.result,
-          name: file.name
-        };
-
-        const previewContainer = document.getElementById('attachmentPreview');
-        const thumb = document.getElementById('previewMediaThumb');
-        document.getElementById('previewMediaTitle').innerText = file.name;
-
-        if (file.type.startsWith('image')) {
-          thumb.innerHTML = `<img src="${event.target.result}" class="w-full h-full object-cover">`;
-        } else {
-          thumb.innerHTML = `<i class="ph-bold ph-file-text text-2xl text-wa-teal"></i>`;
-        }
-
-        previewContainer.classList.remove('hidden');
-        updateSendIcon();
-      };
-      reader.readAsDataURL(file);
-    };
-
-    window.cancelAttachment = function() {
-      window.selectedAttachmentData = null;
-      document.getElementById('attachmentPreview').classList.add('hidden');
-      document.getElementById('hiddenFileInput').value = '';
-      updateSendIcon();
-    };
-
-    window.shareLiveLocation = function() {
-      document.getElementById('attachmentMenu').classList.add('hidden');
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const lat = pos.coords.latitude.toFixed(4);
-            const lng = pos.coords.longitude.toFixed(4);
-            dispatchLiveMessage({
-              media: {
-                type: 'location',
-                caption: `Live Coordinates: ${lat}° N, ${lng}° E`
-              }
-            });
-          },
-          () => {
-            dispatchLiveMessage({
-              media: {
-                type: 'location',
-                caption: `Live Coordinates: 37.7749° N, 122.4194° W`
-              }
-            });
-          }
-        );
-      } else {
-        dispatchLiveMessage({
-          media: {
-            type: 'location',
-            caption: `Live Coordinates: 37.7749° N, 122.4194° W`
-          }
-        });
-      }
-    };
-
-    window.shareMyContactCard = function() {
-      document.getElementById('attachmentMenu').classList.add('hidden');
-      if (!currentProfile) return;
-      dispatchLiveMessage({
-        text: `📇 Contact Card: ${currentProfile.name}\nPhone: ${currentProfile.phone}\nUser ID: ${currentProfile.uid}`
-      });
-    };
-
-    window.initiateChatWithTarget = function() {
-      const identifier = document.getElementById('targetContactIdentifier').value.trim();
-      const name = document.getElementById('targetContactDisplayName').value.trim();
-
-      if (!identifier) {
-        document.getElementById('newChatError').classList.remove('hidden');
-        return;
-      }
-
-      // Check if user exists in registered directory by phone or uid
-      const found = registeredUsers.find(u => u.phone === identifier || u.uid === identifier);
-      if (found) {
-        openChatWithUser(found);
-      } else {
-        // Create manual target
-        const manualTarget = {
-          uid: 'usr_' + identifier.replace(/\W/g, ''),
-          name: name || identifier,
-          phone: identifier,
-          about: 'Live peer contact',
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'
-        };
-        openChatWithUser(manualTarget);
-      }
-
-      closeNewChatModal();
-      document.getElementById('targetContactIdentifier').value = '';
-      document.getElementById('targetContactDisplayName').value = '';
-    };
-
-    /* ==========================================================================
-       12. GEMINI AI SMART REPLIES (AI ASSIST)
+       14. GEMINI AI SMART REPLIES
        ========================================================================== */
     window.triggerAISuggestion = async function() {
-      if (!activeChatTargetId) return;
-      const roomId = getRoomId(currentUserUid, activeChatTargetId);
-      const msgs = localRoomMessages[roomId] || [];
-      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-
+      const messagesContainer = document.getElementById('messagesArea');
+      const lastText = messagesContainer.innerText.slice(-200) || "Hello! How are you?";
       const smartBar = document.getElementById('aiSmartBar');
       const pillsContainer = document.getElementById('aiSuggestionsPills');
-      smartBar.classList.remove('hidden');
-      pillsContainer.innerHTML = `<span class="text-xs text-wa-subtextDark animate-pulse">Generating context-aware replies...</span>`;
 
-      const referenceText = lastMsg ? (lastMsg.text || 'media item') : 'Hello';
+      smartBar.classList.remove('hidden');
+      pillsContainer.innerHTML = `<span class="text-xs text-wa-subtextDark animate-pulse">Generating context replies...</span>`;
 
       try {
-        const prompt = `A user in WhatsApp just received this message: "${referenceText}". Generate 3 short, polite, realistic WhatsApp replies. Return ONLY a comma-separated list of the 3 phrases, with no quotation marks or numbering.`;
         const apiKey = "";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        const payload = {
+          contents: [{
+            parts: [{
+              text: `Generate 3 short, natural WhatsApp replies to this conversation excerpt: "${lastText}". Return only 3 short responses separated by pipes (|), under 8 words each.`
+            }]
+          }]
+        };
 
         const res = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: "Keep replies very concise (under 7 words each), friendly and natural." }] }
-          })
+          body: JSON.stringify(payload)
         });
 
         const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const suggestions = text.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
-          renderSmartChips(suggestions);
-        } else {
-          renderSmartChips(["Sounds great!", "Let me check and get back to you.", "Can we talk shortly?"]);
-        }
-      } catch (e) {
-        renderSmartChips(["Understood!", "Thanks for updating me.", "Sounds like a plan!"]);
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Sounds great!|Sure, let's connect.|Got it!";
+        const suggestions = text.split('|').map(s => s.trim().replace(/^[\d.-]+/, '').trim()).filter(Boolean);
+
+        pillsContainer.innerHTML = suggestions.map(s => `
+          <button onclick="window.useSmartReply('${escapeHtml(s)}')" class="px-2.5 py-1 bg-wa-hoverDark hover:bg-wa-teal hover:text-white text-xs rounded-full border border-wa-borderDark transition whitespace-nowrap">
+            ${escapeHtml(s)}
+          </button>
+        `).join('');
+      } catch(err) {
+        pillsContainer.innerHTML = `
+          <button onclick="window.useSmartReply('Sounds good!')" class="px-2 py-0.5 bg-wa-hoverDark text-xs rounded-full">Sounds good!</button>
+          <button onclick="window.useSmartReply('Got it, thanks!')" class="px-2 py-0.5 bg-wa-hoverDark text-xs rounded-full">Got it, thanks!</button>
+        `;
       }
     };
 
-    function renderSmartChips(list) {
-      const pillsContainer = document.getElementById('aiSuggestionsPills');
-      pillsContainer.innerHTML = list.map(item => `
-        <button onclick="window.applySmartReply('${escapeQuotes(item)}')" class="bg-wa-bgDark hover:bg-wa-teal hover:text-white text-wa-teal border border-wa-teal/40 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition">
-          ${escapeHTML(item)}
-        </button>
-      `).join('');
-    }
-
-    window.applySmartReply = function(text) {
+    window.useSmartReply = function(text) {
       document.getElementById('messageTextInput').value = text;
-      updateSendIcon();
-      window.handleSendAction();
       document.getElementById('aiSmartBar').classList.add('hidden');
+      handleSendAction();
     };
 
     /* ==========================================================================
-       13. MODAL AND UTILITY FUNCTIONS
+       15. LIVE CALL SIMULATION
        ========================================================================== */
+    let callTimer = null;
+
+    window.startVoiceCall = function() {
+      if (!activeChatTargetId) return;
+      const targetName = document.getElementById('activeChatName').innerText;
+      const targetAvatar = document.getElementById('activeChatAvatar').src;
+
+      document.getElementById('callTargetName').innerText = targetName;
+      document.getElementById('callAvatar').src = targetAvatar;
+      document.getElementById('callStatusText').innerText = 'Calling real-time audio channel...';
+      document.getElementById('callOverlay').classList.remove('hidden');
+
+      AudioEngine.playRingtone();
+      callTimer = setInterval(() => AudioEngine.playRingtone(), 2500);
+
+      setTimeout(() => {
+        clearInterval(callTimer);
+        document.getElementById('callStatusText').innerText = '00:01 • Encrypted live session connected';
+      }, 5000);
+    };
+
+    window.startVideoCall = function() {
+      window.startVoiceCall();
+    };
+
+    window.endCall = function() {
+      clearInterval(callTimer);
+      document.getElementById('callOverlay').classList.add('hidden');
+    };
+
+    window.toggleCallMute = function() {
+      const btn = document.getElementById('callMuteBtn');
+      btn.classList.toggle('text-red-500');
+    };
+
+    /* ==========================================================================
+       16. HELPERS, MODALS & EVENT HANDLERS
+       ========================================================================== */
+    window.handleInputKeyDown = function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendAction();
+      }
+    };
+
+    window.handleTypingEvent = function(textarea) {
+      const btnIcon = document.getElementById('sendActionIcon');
+      if (textarea.value.trim().length > 0) {
+        btnIcon.className = 'ph-bold ph-paper-plane-right';
+      } else if (!pendingAttachment) {
+        btnIcon.className = 'ph-bold ph-microphone';
+      }
+    };
+
+    window.toggleEmojiPicker = function() {
+      document.getElementById('emojiPicker').classList.toggle('hidden');
+    };
+
+    window.insertEmoji = function(emoji) {
+      const input = document.getElementById('messageTextInput');
+      input.value += emoji;
+      document.getElementById('emojiPicker').classList.add('hidden');
+      document.getElementById('sendActionIcon').className = 'ph-bold ph-paper-plane-right';
+      input.focus();
+    };
+
+    window.toggleSidebarMenu = function() {
+      document.getElementById('sidebarMenu').classList.toggle('hidden');
+    };
+
+    window.openNewChatModal = function() {
+      document.getElementById('newChatModal').classList.remove('hidden');
+      document.getElementById('sidebarMenu').classList.add('hidden');
+    };
+
+    window.closeNewChatModal = function() {
+      document.getElementById('newChatModal').classList.add('hidden');
+      document.getElementById('newChatError').classList.add('hidden');
+    };
+
     window.openActiveContactInfo = function() {
       if (!activeChatTargetId) return;
-      const conv = conversations.find(c => c.targetUid === activeChatTargetId);
-      const user = registeredUsers.find(u => u.uid === activeChatTargetId) || conv;
-
-      document.getElementById('infoModalAvatar').src = document.getElementById('activeChatAvatar').src;
       document.getElementById('infoModalName').innerText = document.getElementById('activeChatName').innerText;
-      document.getElementById('infoModalPhone').innerText = (user && user.targetPhone) || (user && user.phone) || 'Live Active User';
-      document.getElementById('infoModalAbout').innerText = (user && user.about) || (user && user.targetAbout) || 'Available on WhatsApp';
+      document.getElementById('infoModalAvatar').src = document.getElementById('activeChatAvatar').src;
+      document.getElementById('infoModalPhone').innerText = isCurrentChatGroup ? 'Group Chat' : document.getElementById('activeChatStatus').innerText;
       document.getElementById('infoModalUid').innerText = activeChatTargetId;
       document.getElementById('contactInfoModal').classList.remove('hidden');
     };
@@ -1887,8 +1891,8 @@
     };
 
     window.showPairingInfoModal = function() {
-      document.getElementById('sidebarMenu').classList.add('hidden');
       document.getElementById('pairingInfoModal').classList.remove('hidden');
+      document.getElementById('sidebarMenu').classList.add('hidden');
     };
 
     window.closePairingInfoModal = function() {
@@ -1897,37 +1901,72 @@
 
     window.copyMyPairingText = function() {
       if (!currentProfile) return;
-      copyTextToClipboard(currentProfile.phone || currentProfile.uid);
+      copyToClipboard(currentProfile.phone || currentProfile.uid);
       closePairingInfoModal();
-      showToast("Phone/ID copied to clipboard!");
+      showToast('Identifier copied! Paste in target device');
     };
 
     window.copyMyUserId = function() {
-      if (!currentUserUid) return;
-      copyTextToClipboard(currentUserUid);
-      showToast("User ID copied to clipboard!");
+      if (!currentProfile) return;
+      copyToClipboard(currentProfile.phone || currentProfile.uid);
+      showToast('Phone / UID copied to clipboard!');
     };
 
-    window.openNewChatModal = function() {
-      document.getElementById('sidebarMenu').classList.add('hidden');
-      document.getElementById('newChatModal').classList.remove('hidden');
+    window.toggleTheme = function() {
+      const html = document.documentElement;
+      html.classList.toggle('dark');
+      const icon = document.getElementById('themeIcon');
+      icon.className = html.classList.contains('dark') ? 'ph-bold ph-moon' : 'ph-bold ph-sun';
     };
 
-    window.closeNewChatModal = function() {
-      document.getElementById('newChatModal').classList.add('hidden');
+    window.closeChatMobile = function() {
+      document.getElementById('chatArea').classList.add('hidden');
+      document.getElementById('sidebar').classList.remove('hidden');
+    };
+
+    window.toggleChatSearch = function() {
+      const box = document.getElementById('chatSearchBox');
+      box.classList.toggle('hidden');
+    };
+
+    window.searchWithinMessages = function(q) {
+      const bubbles = document.querySelectorAll('#messagesArea > div');
+      bubbles.forEach(b => {
+        b.style.display = b.innerText.toLowerCase().includes(q.toLowerCase()) ? 'flex' : 'none';
+      });
+    };
+
+    window.filterConversations = function(query) {
+      renderConversationsList(query);
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (query.length > 0) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    };
+
+    window.clearSearch = function() {
+      const input = document.getElementById('contactSearch');
+      input.value = '';
+      filterConversations('');
     };
 
     window.openProfileModal = function() {
       if (!currentProfile) return;
-      document.getElementById('profileModalAvatar').src = currentProfile.avatar;
       document.getElementById('profileNameInput').value = currentProfile.name;
       document.getElementById('profilePhoneInput').value = currentProfile.phone;
       document.getElementById('profileAboutInput').value = currentProfile.about;
+      document.getElementById('profileModalAvatar').src = currentProfile.avatar;
       document.getElementById('profileModal').classList.remove('hidden');
     };
 
     window.closeProfileModal = function() {
       document.getElementById('profileModal').classList.add('hidden');
+    };
+
+    window.changeProfileAvatar = function() {
+      const newSeed = Math.floor(Math.random() * 99);
+      const newUrl = `https://images.unsplash.com/photo-${1534528741775 + newSeed}?w=150&h=150&fit=crop`;
+      document.getElementById('profileModalAvatar').src = newUrl;
+      if (currentProfile) currentProfile.avatar = newUrl;
     };
 
     window.saveProfileChanges = function() {
@@ -1940,161 +1979,16 @@
       applyProfileToUI();
       syncProfileToCloud();
       closeProfileModal();
-      showToast("Profile updated live across the network!");
+      showToast('Profile updated & synchronized live!');
     };
 
-    window.changeProfileAvatar = function() {
-      const avatars = [
-        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop',
-        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&h=150&fit=crop',
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop',
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop'
-      ];
-      currentProfile.avatar = avatars[Math.floor(Math.random() * avatars.length)];
-      document.getElementById('profileModalAvatar').src = currentProfile.avatar;
-      document.getElementById('myAvatar').src = currentProfile.avatar;
-      document.getElementById('storyUserAvatar').src = currentProfile.avatar;
-    };
-
-    window.openStatusModal = function() {
-      if (currentStories.length > 0) {
-        window.viewStoryLive(0);
-      } else {
-        window.openCreateStoryModal();
-      }
-    };
-
-    window.toggleSidebarMenu = function() {
-      document.getElementById('sidebarMenu').classList.toggle('hidden');
-    };
-
-    window.toggleTheme = function() {
-      const html = document.documentElement;
-      html.classList.toggle('dark');
-      const isDark = html.classList.contains('dark');
-      document.getElementById('themeIcon').className = isDark ? 'ph-bold ph-moon' : 'ph-bold ph-sun';
-    };
-
-    window.closeChatMobile = function() {
-      activeChatTargetId = null;
-      document.getElementById('sidebar').classList.remove('hidden');
-      document.getElementById('activeChatContainer').classList.add('hidden');
-      document.getElementById('emptyState').classList.remove('hidden');
-    };
-
-    window.toggleEmojiPicker = function() {
-      document.getElementById('emojiPicker').classList.toggle('hidden');
-    };
-
-    window.insertEmoji = function(emoji) {
-      const input = document.getElementById('messageTextInput');
-      input.value += emoji;
-      document.getElementById('emojiPicker').classList.add('hidden');
-      updateSendIcon();
-      input.focus();
-    };
-
-    window.handleInputKeyDown = function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        window.handleSendAction();
-      }
-    };
-
-    window.handleTypingEvent = function(el) {
-      updateSendIcon();
-      el.style.height = 'auto';
-      el.style.height = el.scrollHeight + 'px';
-    };
-
-    function updateSendIcon() {
-      const input = document.getElementById('messageTextInput');
-      const icon = document.getElementById('sendActionIcon');
-      if (input.value.trim().length > 0 || window.selectedAttachmentData) {
-        icon.className = 'ph-bold ph-paper-plane-right';
-      } else {
-        icon.className = 'ph-bold ph-microphone';
-      }
-    }
-
-    window.toggleChatSearch = function() {
-      const box = document.getElementById('chatSearchBox');
-      box.classList.toggle('hidden');
-      if (!box.classList.contains('hidden')) {
-        document.getElementById('inChatSearchInput').focus();
-      }
-    };
-
-    window.searchWithinMessages = function(q) {
-      const container = document.getElementById('messagesArea');
-      const bubbles = container.querySelectorAll('p');
-      bubbles.forEach(p => {
-        if (q && p.innerText.toLowerCase().includes(q.toLowerCase())) {
-          p.parentElement.classList.add('ring-2', 'ring-amber-400');
-        } else {
-          p.parentElement.classList.remove('ring-2', 'ring-amber-400');
-        }
-      });
-    };
-
-    window.filterConversations = function(val) {
-      const clearBtn = document.getElementById('clearSearchBtn');
-      if (val.length > 0) clearBtn.classList.remove('hidden');
-      else clearBtn.classList.add('hidden');
-      renderConversationsList(val);
-    };
-
-    window.clearSearch = function() {
-      const input = document.getElementById('contactSearch');
-      input.value = '';
-      window.filterConversations('');
-    };
-
-    /* CALL SIMULATOR */
-    let callTimerInterval = null;
-    window.startVoiceCall = function() {
-      if (!activeChatTargetId) return;
-      const overlay = document.getElementById('callOverlay');
-      document.getElementById('callAvatar').src = document.getElementById('activeChatAvatar').src;
-      document.getElementById('callTargetName').innerText = document.getElementById('activeChatName').innerText;
-      document.getElementById('callStatusText').innerText = 'Calling live user...';
-      overlay.classList.remove('hidden');
-
-      AudioEngine.playRingtone();
-      setTimeout(() => {
-        document.getElementById('callStatusText').innerText = 'Connected (00:01)';
-        let sec = 1;
-        callTimerInterval = setInterval(() => {
-          sec++;
-          const m = Math.floor(sec / 60);
-          const s = sec % 60;
-          document.getElementById('callStatusText').innerText = `Connected (${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s})`;
-        }, 1000);
-      }, 2500);
-    };
-
-    window.startVideoCall = function() {
-      window.startVoiceCall();
-      document.getElementById('callStatusText').innerText = 'Connecting live video feed...';
-    };
-
-    window.toggleCallMute = function() {
-      document.getElementById('callMuteBtn').classList.toggle('text-red-500');
-    };
-
-    window.endCall = function() {
-      clearInterval(callTimerInterval);
-      document.getElementById('callOverlay').classList.add('hidden');
-    };
-
-    /* HELPER UTILITIES */
-    function formatTime(timestamp) {
-      const date = new Date(timestamp);
-      let h = date.getHours();
-      const m = date.getMinutes();
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      h = h % 12 || 12;
-      return `${h}:${m < 10 ? '0' : ''}${m} ${ampm}`;
+    function copyToClipboard(text) {
+      const dummy = document.createElement("textarea");
+      document.body.appendChild(dummy);
+      dummy.value = text;
+      dummy.select();
+      document.execCommand("copy");
+      document.body.removeChild(dummy);
     }
 
     function showToast(msg) {
@@ -2105,33 +1999,21 @@
       setTimeout(() => {
         toast.classList.add('hidden');
         toast.classList.remove('flex');
-      }, 3500);
+      }, 3000);
     }
 
-    function copyTextToClipboard(text) {
-      const el = document.createElement('textarea');
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+    function formatTime(timestamp) {
+      if (!timestamp) return '';
+      const d = new Date(timestamp);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     }
 
-    function escapeHTML(str) {
-      return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    function escapeHtml(str) {
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function escapeQuotes(str) {
-      return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    }
-
-    // Launch
-    window.addEventListener('DOMContentLoaded', () => {
+    // Startup on window load
+    window.addEventListener('load', () => {
       initLiveEngine();
     });
   </script>
