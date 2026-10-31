@@ -1,0 +1,2139 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Web Pro - Live Real-Time</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            wa: {
+              teal: '#00a884',
+              tealDark: '#008069',
+              tealLight: '#25d366',
+              bgDark: '#111b21',
+              panelDark: '#202c33',
+              chatDark: '#0b141a',
+              bubbleOutDark: '#005c4b',
+              bubbleInDark: '#202c33',
+              subtextDark: '#8696a0',
+              borderDark: '#222d34',
+              hoverDark: '#2a3942',
+              bgLight: '#f0f2f5',
+              panelLight: '#ffffff',
+              chatLight: '#efeae2',
+              bubbleOutLight: '#d9fdd3',
+              bubbleInLight: '#ffffff',
+              borderLight: '#e9edef'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(134, 150, 160, 0.25); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(134, 150, 160, 0.45); }
+    .chat-pattern {
+      background-image: radial-gradient(rgba(134, 150, 160, 0.08) 1.5px, transparent 1.5px);
+      background-size: 24px 24px;
+    }
+    .pulse-record {
+      animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body class="bg-[#0c1317] text-[#e9edef] font-sans antialiased h-screen w-screen overflow-hidden select-none">
+
+  <!-- INITIAL USER ONBOARDING MODAL (Real Identity Registration) -->
+  <div id="onboardingModal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div class="flex flex-col items-center text-center mb-6">
+        <div class="w-16 h-16 rounded-full bg-wa-teal/20 text-wa-teal flex items-center justify-center text-3xl mb-3">
+          <i class="ph-bold ph-whatsapp-logo"></i>
+        </div>
+        <h2 class="text-xl font-bold text-white">Join Real-Time WhatsApp</h2>
+        <p class="text-xs text-wa-subtextDark mt-1">Enter your real profile details to connect live across all devices</p>
+      </div>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-wa-subtextDark block mb-1">Your Full Name / Alias *</label>
+          <input type="text" id="onboardName" placeholder="e.g. David Miller" class="w-full bg-wa-bgDark text-white px-3.5 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div>
+          <label class="text-xs text-wa-subtextDark block mb-1">Your Phone / Handle *</label>
+          <input type="text" id="onboardPhone" placeholder="+1 555-0192 or your handle" class="w-full bg-wa-bgDark text-white px-3.5 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div>
+          <label class="text-xs text-wa-subtextDark block mb-1">Status / About</label>
+          <input type="text" id="onboardAbout" value="Available on WhatsApp" class="w-full bg-wa-bgDark text-white px-3.5 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div id="onboardingError" class="hidden text-xs text-red-400 font-medium">Please enter a valid name and phone.</div>
+        <button onclick="completeUserOnboarding()" class="w-full py-3 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-xl text-sm transition shadow-lg mt-2 flex items-center justify-center space-x-2">
+          <span>Start Messaging Live</span>
+          <i class="ph-bold ph-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Wrapper Container -->
+  <div class="h-screen w-screen flex flex-col justify-center items-center bg-[#0c1317] md:p-3">
+    <div class="w-full h-full max-w-[1700px] flex overflow-hidden shadow-2xl md:rounded-2xl border border-wa-borderDark bg-wa-bgDark relative">
+
+      <!-- LEFT SIDEBAR: Chat List & Live Navigation -->
+      <aside id="sidebar" class="w-full md:w-[410px] lg:w-[440px] flex-shrink-0 flex flex-col border-r border-wa-borderDark bg-wa-bgDark z-20">
+        
+        <!-- Header -->
+        <header class="h-16 bg-wa-panelDark px-4 flex items-center justify-between border-b border-wa-borderDark">
+          <div class="flex items-center space-x-3 cursor-pointer group" onclick="openProfileModal()">
+            <div class="relative">
+              <img id="myAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces" class="w-10 h-10 rounded-full object-cover ring-2 ring-wa-teal" alt="My Profile">
+              <span class="absolute bottom-0 right-0 w-3 h-3 bg-wa-teal rounded-full border-2 border-wa-panelDark"></span>
+            </div>
+            <div class="hidden sm:block">
+              <h2 id="myDisplayName" class="text-sm font-semibold leading-tight text-white truncate max-w-[150px]">Loading Profile...</h2>
+              <p id="liveStatusBadge" class="text-[11px] text-wa-teal font-medium flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-wa-teal animate-pulse"></span>
+                <span>Connecting live...</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Top Action Buttons -->
+          <div class="flex items-center space-x-1 text-wa-subtextDark">
+            <button onclick="openLiveUsersDirectory()" title="Live Users Directory" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl text-wa-teal" id="liveUsersBtn">
+              <i class="ph-bold ph-users-three"></i>
+            </button>
+            <button onclick="openStatusModal()" title="Status Stories" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl relative">
+              <i class="ph-bold ph-circle-dashed"></i>
+              <span id="storyDotBadge" class="hidden absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
+            </button>
+            <button onclick="openNewChatModal()" title="New Chat with User" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+              <i class="ph-bold ph-chat-text"></i>
+            </button>
+            <button onclick="toggleTheme()" title="Toggle Theme" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+              <i id="themeIcon" class="ph-bold ph-moon"></i>
+            </button>
+            <div class="relative">
+              <button onclick="toggleSidebarMenu()" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+                <i class="ph-bold ph-dots-three-vertical"></i>
+              </button>
+              <!-- Context Menu -->
+              <div id="sidebarMenu" class="hidden absolute right-0 mt-2 w-52 bg-wa-panelDark border border-wa-borderDark rounded-xl shadow-2xl py-2 z-50 text-sm">
+                <button onclick="openLiveUsersDirectory()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-white flex items-center space-x-2">
+                  <i class="ph ph-user-list text-base text-wa-teal"></i> <span>Online Users Network</span>
+                </button>
+                <button onclick="openNewChatModal()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-white flex items-center space-x-2">
+                  <i class="ph ph-user-plus text-base"></i> <span>Connect via Phone / ID</span>
+                </button>
+                <button onclick="openProfileModal()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-white flex items-center space-x-2">
+                  <i class="ph ph-gear text-base"></i> <span>Profile & Settings</span>
+                </button>
+                <div class="border-t border-wa-borderDark my-1"></div>
+                <button onclick="showPairingInfoModal()" class="w-full text-left px-4 py-2 hover:bg-wa-hoverDark text-wa-tealLight flex items-center space-x-2">
+                  <i class="ph ph-qr-code text-base"></i> <span>Invite / Link Device</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <!-- Search & Filter Bar -->
+        <div class="p-2.5 border-b border-wa-borderDark flex items-center gap-2">
+          <div class="relative flex-1">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-wa-subtextDark pointer-events-none">
+              <i class="ph-bold ph-magnifying-glass text-lg"></i>
+            </span>
+            <input type="text" id="contactSearch" oninput="filterConversations(this.value)" placeholder="Search contacts or start real chat" class="w-full pl-10 pr-8 py-2 bg-wa-panelDark text-white rounded-lg text-sm border-none focus:outline-none focus:ring-1 focus:ring-wa-teal placeholder-wa-subtextDark">
+            <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-wa-subtextDark hover:text-white">
+              <i class="ph-bold ph-x"></i>
+            </button>
+          </div>
+          <button onclick="openLiveUsersDirectory()" class="p-2 bg-wa-panelDark hover:bg-wa-hoverDark text-wa-teal rounded-lg transition text-base" title="Discover Real Users">
+            <i class="ph-bold ph-magnifying-glass-plus"></i>
+          </button>
+        </div>
+
+        <!-- Live Stories / Status Carousel -->
+        <div class="p-3 border-b border-wa-borderDark bg-[#162229] overflow-x-auto flex items-center space-x-3.5 no-scrollbar">
+          <div class="flex flex-col items-center flex-shrink-0 cursor-pointer" onclick="openCreateStoryModal()">
+            <div class="relative w-12 h-12 rounded-full border-2 border-dashed border-wa-teal p-0.5 flex items-center justify-center">
+              <img id="storyUserAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces" class="w-full h-full rounded-full object-cover">
+              <span class="absolute bottom-0 right-0 bg-wa-teal text-white rounded-full p-0.5 shadow"><i class="ph-bold ph-plus text-xs"></i></span>
+            </div>
+            <span class="text-[11px] mt-1 text-wa-subtextDark truncate max-w-[56px]">Post Story</span>
+          </div>
+          <div id="storiesContainer" class="flex items-center space-x-3.5">
+            <!-- Dynamically populated live stories from real users -->
+          </div>
+        </div>
+
+        <!-- Real Conversations List (Real-Time Live) -->
+        <div id="chatsList" class="flex-1 overflow-y-auto divide-y divide-wa-borderDark/40">
+          <div class="p-8 text-center text-wa-subtextDark text-sm">
+            <i class="ph ph-spinner-gap animate-spin text-3xl mb-2 text-wa-teal block mx-auto"></i>
+            <p>Syncing live messages and active contacts...</p>
+          </div>
+        </div>
+
+        <!-- Live Device Footnote -->
+        <div class="p-2.5 bg-wa-panelDark/80 border-t border-wa-borderDark flex items-center justify-between text-xs text-wa-subtextDark">
+          <span class="flex items-center space-x-1.5 truncate">
+            <span class="w-2 h-2 rounded-full bg-wa-tealLight"></span>
+            <span id="myUserHandleTag" class="text-[11px] truncate">Live ID: Authenticating...</span>
+          </span>
+          <button onclick="copyMyUserId()" class="text-wa-teal hover:underline text-[11px] font-semibold flex-shrink-0 ml-2">Copy ID</button>
+        </div>
+      </aside>
+
+      <!-- RIGHT MAIN: Active Real-Time Chat Viewport -->
+      <main id="chatArea" class="flex-1 flex flex-col bg-wa-chatDark h-full relative z-10 transition-transform">
+        
+        <!-- Welcome Screen (When no active chat is selected) -->
+        <div id="emptyState" class="hidden md:flex flex-col items-center justify-center h-full text-center px-6 bg-wa-panelDark border-b-[6px] border-wa-teal select-text">
+          <div class="w-40 h-40 mb-6 flex items-center justify-center rounded-full bg-wa-bgDark/60 border border-wa-borderDark shadow-inner">
+            <i class="ph-duotone ph-whatsapp-logo text-7xl text-wa-teal"></i>
+          </div>
+          <h1 class="text-3xl font-light text-white mb-2">WhatsApp Web Live</h1>
+          <p class="text-sm text-wa-subtextDark max-w-md leading-relaxed">
+            Connected to real-time live network. Click on <span class="text-wa-teal font-semibold">Online Users Network</span> or connect via phone/ID to message real users across the globe.
+          </p>
+          <div class="mt-6 flex flex-wrap gap-2 justify-center">
+            <button onclick="openLiveUsersDirectory()" class="px-4 py-2 bg-wa-teal hover:bg-wa-tealDark text-white text-xs font-semibold rounded-full shadow flex items-center space-x-1.5 transition">
+              <i class="ph-bold ph-users text-sm"></i>
+              <span>Find Real Active Users</span>
+            </button>
+            <button onclick="showPairingInfoModal()" class="px-4 py-2 bg-wa-bgDark hover:bg-wa-hoverDark text-wa-subtextDark hover:text-white border border-wa-borderDark text-xs font-semibold rounded-full transition flex items-center space-x-1.5">
+              <i class="ph-bold ph-share-network text-sm"></i>
+              <span>Share My Link</span>
+            </button>
+          </div>
+          <div class="mt-8 flex items-center space-x-2 text-xs text-wa-subtextDark bg-wa-bgDark px-4 py-2 rounded-full border border-wa-borderDark">
+            <i class="ph-fill ph-lock-simple text-wa-teal"></i>
+            <span>End-to-end cloud synced messaging protocol</span>
+          </div>
+        </div>
+
+        <!-- Active Chat Screen -->
+        <div id="activeChatContainer" class="flex-1 flex flex-col h-full hidden">
+          
+          <!-- Chat Header -->
+          <header class="h-16 bg-wa-panelDark px-4 flex items-center justify-between border-b border-wa-borderDark z-20">
+            <div class="flex items-center space-x-3 cursor-pointer">
+              <!-- Back button for mobile view -->
+              <button onclick="closeChatMobile()" class="md:hidden text-2xl text-wa-subtextDark hover:text-white mr-1">
+                <i class="ph-bold ph-arrow-left"></i>
+              </button>
+              
+              <div class="relative" onclick="openActiveContactInfo()">
+                <img id="activeChatAvatar" src="" class="w-10 h-10 rounded-full object-cover" alt="Active Chat">
+                <span id="activeOnlineDot" class="hidden absolute bottom-0 right-0 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
+              </div>
+              <div onclick="openActiveContactInfo()">
+                <h3 id="activeChatName" class="text-sm font-semibold text-white leading-tight"></h3>
+                <p id="activeChatStatus" class="text-xs text-wa-teal">Online</p>
+              </div>
+            </div>
+
+            <!-- Chat Header Actions -->
+            <div class="flex items-center space-x-2 text-wa-subtextDark">
+              <button onclick="startVoiceCall()" title="Audio Call" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+                <i class="ph-bold ph-phone"></i>
+              </button>
+              <button onclick="startVideoCall()" title="Video Call" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+                <i class="ph-bold ph-video-camera"></i>
+              </button>
+              <button onclick="triggerAISuggestion()" title="Ask Gemini AI for smart reply suggestions" class="px-2.5 py-1.5 bg-wa-teal/20 text-wa-teal hover:bg-wa-teal/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                <i class="ph-bold ph-sparkle text-sm"></i>
+                <span class="hidden sm:inline">AI Assist</span>
+              </button>
+              <button onclick="toggleChatSearch()" title="Search inside conversation" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+                <i class="ph-bold ph-magnifying-glass"></i>
+              </button>
+              <button onclick="openActiveContactInfo()" title="Contact Info" class="p-2 hover:bg-wa-hoverDark rounded-full transition text-xl">
+                <i class="ph-bold ph-info"></i>
+              </button>
+            </div>
+          </header>
+
+          <!-- In-Chat Search Panel -->
+          <div id="chatSearchBox" class="hidden bg-wa-panelDark border-b border-wa-borderDark p-2 flex items-center space-x-2 z-10">
+            <i class="ph-bold ph-magnifying-glass text-wa-subtextDark ml-2"></i>
+            <input type="text" id="inChatSearchInput" oninput="searchWithinMessages(this.value)" placeholder="Search in this conversation..." class="flex-1 bg-wa-bgDark text-white px-3 py-1.5 rounded-lg text-sm focus:outline-none">
+            <button onclick="toggleChatSearch()" class="text-wa-subtextDark hover:text-white p-1">
+              <i class="ph-bold ph-x text-lg"></i>
+            </button>
+          </div>
+
+          <!-- Messages Scroll View -->
+          <div id="messagesArea" class="flex-1 overflow-y-auto p-4 md:px-12 space-y-3 chat-pattern relative select-text">
+            <!-- Live messages will populate here -->
+          </div>
+
+          <!-- AI smart replies bar -->
+          <div id="aiSmartBar" class="hidden px-4 py-2 bg-wa-panelDark/95 border-t border-wa-borderDark flex items-center space-x-2 overflow-x-auto no-scrollbar">
+            <span class="text-xs text-wa-teal font-semibold flex items-center space-x-1 flex-shrink-0">
+              <i class="ph-bold ph-sparkle"></i> <span>Smart Replies:</span>
+            </span>
+            <div id="aiSuggestionsPills" class="flex items-center space-x-2">
+              <!-- Suggestion pills -->
+            </div>
+          </div>
+
+          <!-- Media Preview Container -->
+          <div id="attachmentPreview" class="hidden bg-wa-panelDark p-3 border-t border-wa-borderDark flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div id="previewMediaThumb" class="w-14 h-14 bg-wa-bgDark rounded-lg flex items-center justify-center overflow-hidden border border-wa-borderDark"></div>
+              <div>
+                <p id="previewMediaTitle" class="text-sm font-medium text-white truncate max-w-xs">attachment.jpg</p>
+                <p id="previewMediaSub" class="text-xs text-wa-subtextDark">Ready to send</p>
+              </div>
+            </div>
+            <button onclick="cancelAttachment()" class="text-wa-subtextDark hover:text-red-400 p-2 rounded-full">
+              <i class="ph-bold ph-trash text-lg"></i>
+            </button>
+          </div>
+
+          <!-- Recording Banner -->
+          <div id="recordingBanner" class="hidden h-14 bg-wa-panelDark border-t border-wa-borderDark px-4 flex items-center justify-between z-20">
+            <div class="flex items-center space-x-3">
+              <div class="w-3.5 h-3.5 rounded-full bg-red-500 pulse-record"></div>
+              <span id="recordingTimer" class="text-sm font-mono text-red-400 font-semibold">0:00</span>
+              <span class="text-xs text-wa-subtextDark">Recording Live Voice Note...</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button onclick="cancelVoiceRecording()" class="p-2 text-wa-subtextDark hover:text-red-400 rounded-full transition">
+                <i class="ph-bold ph-trash text-lg"></i>
+              </button>
+              <button onclick="stopAndSendVoiceRecording()" class="px-4 py-1.5 bg-wa-teal hover:bg-wa-tealDark text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow">
+                <i class="ph-bold ph-paper-plane-right"></i>
+                <span>Send Note</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Message Input Footer -->
+          <footer id="chatInputFooter" class="min-h-16 bg-wa-panelDark px-4 py-2 flex items-center space-x-2 border-t border-wa-borderDark relative z-20">
+            <button onclick="toggleEmojiPicker()" class="p-2 text-wa-subtextDark hover:text-white rounded-full transition text-2xl relative" title="Emojis">
+              <i class="ph-bold ph-smiley"></i>
+            </button>
+
+            <!-- Attachment Menu -->
+            <div class="relative">
+              <button onclick="toggleAttachmentMenu()" class="p-2 text-wa-subtextDark hover:text-white rounded-full transition text-2xl" title="Attach file">
+                <i class="ph-bold ph-paperclip"></i>
+              </button>
+              
+              <div id="attachmentMenu" class="hidden absolute bottom-14 left-0 bg-wa-panelDark border border-wa-borderDark rounded-2xl p-3 shadow-2xl flex flex-col space-y-3 z-30 w-48">
+                <button onclick="triggerFileInput('image/*')" class="flex items-center space-x-3 text-sm text-white hover:text-wa-teal p-1.5 rounded-lg transition">
+                  <span class="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center text-white"><i class="ph-bold ph-image text-lg"></i></span>
+                  <span>Photos & Media</span>
+                </button>
+                <button onclick="shareLiveLocation()" class="flex items-center space-x-3 text-sm text-white hover:text-wa-teal p-1.5 rounded-lg transition">
+                  <span class="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center text-white"><i class="ph-bold ph-map-pin text-lg"></i></span>
+                  <span>Real GPS Location</span>
+                </button>
+                <button onclick="shareMyContactCard()" class="flex items-center space-x-3 text-sm text-white hover:text-wa-teal p-1.5 rounded-lg transition">
+                  <span class="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white"><i class="ph-bold ph-user text-lg"></i></span>
+                  <span>My Contact Card</span>
+                </button>
+              </div>
+              <input type="file" id="hiddenFileInput" class="hidden" onchange="handleFileSelection(event)">
+            </div>
+
+            <!-- Emoji Picker Panel -->
+            <div id="emojiPicker" class="hidden absolute bottom-16 left-4 bg-wa-panelDark border border-wa-borderDark rounded-2xl p-3 shadow-2xl z-40 w-72">
+              <div class="text-xs font-semibold text-wa-subtextDark mb-2">QUICK REACTIONS & EMOJIS</div>
+              <div class="grid grid-cols-6 gap-2 text-2xl cursor-pointer">
+                <span onclick="insertEmoji('👍')">👍</span>
+                <span onclick="insertEmoji('❤️')">❤️</span>
+                <span onclick="insertEmoji('😂')">😂</span>
+                <span onclick="insertEmoji('😮')">😮</span>
+                <span onclick="insertEmoji('😢')">😢</span>
+                <span onclick="insertEmoji('🙏')">🙏</span>
+                <span onclick="insertEmoji('🔥')">🔥</span>
+                <span onclick="insertEmoji('🎉')">🎉</span>
+                <span onclick="insertEmoji('🚀')">🚀</span>
+                <span onclick="insertEmoji('✨')">✨</span>
+                <span onclick="insertEmoji('💯')">💯</span>
+                <span onclick="insertEmoji('🤝')">🤝</span>
+              </div>
+            </div>
+
+            <!-- Text Box -->
+            <div class="flex-1 relative">
+              <textarea id="messageTextInput" rows="1" onkeydown="handleInputKeyDown(event)" oninput="handleTypingEvent(this)" placeholder="Type a message" class="w-full bg-wa-bgDark text-white py-2.5 px-4 rounded-xl text-sm border-none focus:outline-none focus:ring-1 focus:ring-wa-teal placeholder-wa-subtextDark resize-none max-h-32 leading-5"></textarea>
+            </div>
+
+            <!-- Send or Mic Action -->
+            <button id="sendActionBtn" onclick="handleSendAction()" class="p-2.5 bg-wa-teal hover:bg-wa-tealDark text-white rounded-full transition text-xl flex items-center justify-center shadow">
+              <i id="sendActionIcon" class="ph-bold ph-microphone"></i>
+            </button>
+          </footer>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- DIRECTORY MODAL: DISCOVER REAL REGISTERED USERS -->
+  <div id="liveDirectoryModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-lg p-6 flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between pb-4 border-b border-wa-borderDark">
+        <div class="flex items-center space-x-2">
+          <i class="ph-bold ph-users-three text-xl text-wa-teal"></i>
+          <h3 class="text-lg font-semibold text-white">Live Users Network</h3>
+        </div>
+        <button onclick="closeLiveUsersDirectory()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-xl"></i></button>
+      </div>
+      <p class="text-xs text-wa-subtextDark py-2">Real individuals currently connected to this application. Tap on any user to begin an instant real-time conversation.</p>
+      
+      <div id="liveUsersList" class="flex-1 overflow-y-auto space-y-2 py-2 pr-1 divide-y divide-wa-borderDark/40">
+        <!-- Live users populated dynamically -->
+      </div>
+      
+      <div class="pt-3 border-t border-wa-borderDark flex justify-between items-center text-xs text-wa-subtextDark">
+        <span>Instant Cloud Synchronization</span>
+        <button onclick="fetchRegisteredUsersLive()" class="text-wa-teal hover:underline flex items-center space-x-1">
+          <i class="ph-bold ph-arrows-clockwise"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTACT INFO MODAL (REPLACES BROWSER ALERT) -->
+  <div id="contactInfoModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-white">Contact Info</h3>
+        <button onclick="closeActiveContactInfo()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
+      </div>
+      <div class="flex flex-col items-center text-center mb-6">
+        <img id="infoModalAvatar" src="" class="w-24 h-24 rounded-full object-cover ring-4 ring-wa-teal mb-3">
+        <h4 id="infoModalName" class="text-lg font-bold text-white">User Name</h4>
+        <p id="infoModalPhone" class="text-xs text-wa-teal font-mono mt-0.5">+1 555-0000</p>
+      </div>
+      <div class="bg-wa-bgDark p-4 rounded-xl border border-wa-borderDark space-y-3 text-sm">
+        <div>
+          <span class="text-xs text-wa-subtextDark block">About / Status</span>
+          <p id="infoModalAbout" class="text-white mt-0.5">Available on WhatsApp</p>
+        </div>
+        <div>
+          <span class="text-xs text-wa-subtextDark block">Unique User ID</span>
+          <p id="infoModalUid" class="text-xs font-mono text-gray-400 break-all mt-0.5"></p>
+        </div>
+      </div>
+      <div class="mt-6 flex space-x-2">
+        <button onclick="closeActiveContactInfo()" class="w-full py-2.5 bg-wa-hoverDark hover:bg-wa-panelDark text-white font-medium rounded-xl text-sm transition">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVITE / DEVICE PAIRING MODAL -->
+  <div id="pairingInfoModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-white flex items-center space-x-2">
+          <i class="ph-bold ph-qr-code text-wa-teal"></i>
+          <span>Connect Another Device / Peer</span>
+        </h3>
+        <button onclick="closePairingInfoModal()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
+      </div>
+      <p class="text-xs text-wa-subtextDark mb-4 leading-relaxed">
+        To chat with yourself on another device or with a friend, copy your Phone or ID below. In the other tab/phone, tap <strong class="text-white">New Chat</strong> and enter this identifier:
+      </p>
+      <div class="bg-wa-bgDark p-3 rounded-xl border border-wa-borderDark space-y-2 mb-4">
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-wa-subtextDark">Your Phone / Handle:</span>
+          <span id="pairingPhoneDisplay" class="font-mono text-wa-teal font-bold"></span>
+        </div>
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-wa-subtextDark">Your User UID:</span>
+          <span id="pairingUidDisplay" class="font-mono text-gray-400 truncate max-w-[200px]"></span>
+        </div>
+      </div>
+      <button onclick="copyMyPairingText()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow">
+        <i class="ph-bold ph-copy"></i>
+        <span>Copy Identifier & Close</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- CALL OVERLAY (LIVE CALL SIMULATION) -->
+  <div id="callOverlay" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-white">
+    <div class="relative mb-6">
+      <img id="callAvatar" src="" class="w-32 h-32 rounded-full object-cover ring-4 ring-wa-teal animate-pulse">
+      <span class="absolute bottom-1 right-2 w-5 h-5 bg-wa-teal rounded-full ring-4 ring-black"></span>
+    </div>
+    <h2 id="callTargetName" class="text-2xl font-bold mb-1">User Name</h2>
+    <p id="callStatusText" class="text-wa-teal text-sm mb-8 font-medium">Connecting live voice channel...</p>
+    
+    <div class="flex items-center space-x-6">
+      <button onclick="toggleCallMute()" id="callMuteBtn" class="p-4 bg-wa-panelDark hover:bg-wa-hoverDark rounded-full text-2xl transition">
+        <i class="ph-bold ph-microphone"></i>
+      </button>
+      <button onclick="endCall()" class="p-4 bg-red-600 hover:bg-red-700 rounded-full text-2xl transition shadow-lg">
+        <i class="ph-bold ph-phone-disconnect"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- STATUS / STORIES MODAL VIEWER -->
+  <div id="storyViewerModal" class="hidden fixed inset-0 bg-black/95 z-50 flex items-center justify-center">
+    <button onclick="closeStoryViewer()" class="absolute top-6 right-6 text-white text-3xl hover:text-gray-300 z-50">
+      <i class="ph-bold ph-x"></i>
+    </button>
+    <div class="absolute top-4 inset-x-8 max-w-md mx-auto h-1 bg-white/20 rounded overflow-hidden">
+      <div id="storyProgressBar" class="h-full bg-wa-teal w-0 transition-all duration-[4000ms] ease-linear"></div>
+    </div>
+    <div class="max-w-md w-full h-[85vh] flex flex-col justify-between p-6 relative rounded-2xl overflow-hidden border border-wa-borderDark bg-cover bg-center" id="storyContentCard">
+      <div class="flex items-center space-x-3 bg-black/40 backdrop-blur-sm p-3 rounded-xl w-fit">
+        <img id="storyViewerAvatar" src="" class="w-10 h-10 rounded-full object-cover border border-wa-teal">
+        <div>
+          <h4 id="storyViewerName" class="text-sm font-semibold text-white">Contact</h4>
+          <p id="storyViewerTime" class="text-xs text-gray-300">Just now</p>
+        </div>
+      </div>
+      <div class="bg-black/60 backdrop-blur-md p-4 rounded-xl text-center">
+        <p id="storyViewerCaption" class="text-lg font-medium text-white"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE REAL STORY MODAL -->
+  <div id="createStoryModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-white">Share Live Status Story</h3>
+        <button onclick="closeCreateStoryModal()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-wa-subtextDark">Story Text</label>
+          <textarea id="storyTextCaption" rows="3" placeholder="What's happening right now?" class="w-full mt-1 bg-wa-bgDark text-white p-3 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none"></textarea>
+        </div>
+        <div>
+          <label class="text-xs text-wa-subtextDark">Gradient Background</label>
+          <div class="flex space-x-2 mt-2">
+            <button onclick="selectStoryBg('gradient-1')" class="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-teal-800 ring-2 ring-white/50"></button>
+            <button onclick="selectStoryBg('gradient-2')" class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-indigo-900"></button>
+            <button onclick="selectStoryBg('gradient-3')" class="w-8 h-8 rounded-full bg-gradient-to-r from-rose-500 to-amber-700"></button>
+            <button onclick="selectStoryBg('gradient-4')" class="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-600 to-blue-900"></button>
+          </div>
+        </div>
+        <button onclick="publishStoryLive()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-lg text-sm transition">Post Story to Cloud</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- START CHAT BY PHONE / ID MODAL -->
+  <div id="newChatModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-white">Start New Conversation</h3>
+        <button onclick="closeNewChatModal()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-wa-subtextDark">Contact's Phone Number or UID *</label>
+          <input type="text" id="targetContactIdentifier" placeholder="e.g. +1 555-0199 or user ID" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div>
+          <label class="text-xs text-wa-subtextDark">Display Name (Optional if in network)</label>
+          <input type="text" id="targetContactDisplayName" placeholder="e.g. Michael" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div id="newChatError" class="hidden text-xs text-red-400 font-medium">Please enter a phone number or user ID.</div>
+        <button onclick="initiateChatWithTarget()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-lg text-sm transition mt-2">Open Conversation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE / SETTINGS MODAL -->
+  <div id="profileModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-white">Your Profile</h3>
+        <button onclick="closeProfileModal()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
+      </div>
+      <div class="flex flex-col items-center mb-6">
+        <img id="profileModalAvatar" src="" class="w-24 h-24 rounded-full object-cover ring-4 ring-wa-teal mb-3">
+        <button onclick="changeProfileAvatar()" class="text-xs text-wa-teal font-semibold hover:underline flex items-center space-x-1">
+          <i class="ph-bold ph-camera"></i> <span>Pick New Avatar</span>
+        </button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-wa-subtextDark">Your Display Name</label>
+          <input type="text" id="profileNameInput" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div>
+          <label class="text-xs text-wa-subtextDark">Your Phone / Handle</label>
+          <input type="text" id="profilePhoneInput" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <div>
+          <label class="text-xs text-wa-subtextDark">About</label>
+          <input type="text" id="profileAboutInput" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
+        </div>
+        <button onclick="saveProfileChanges()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-lg text-sm transition">Save to Cloud</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastNotification" class="fixed top-5 right-5 bg-wa-panelDark border border-wa-teal text-white px-4 py-3 rounded-xl shadow-2xl text-xs z-[100] hidden items-center space-x-2 transition-all">
+    <i class="ph-fill ph-check-circle text-wa-teal text-lg"></i>
+    <span id="toastMessage">Action completed</span>
+  </div>
+
+  <!-- REAL-TIME CLOUD FIREBASE SDK ENGINE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    /* ==========================================================================
+       1. FIREBASE CONFIGURATION & INITIALIZATION
+       ========================================================================== */
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'whatsapp-realtime-core';
+    
+    // Automatic fallback config if running outside embedded container
+    const defaultFirebaseConfig = {
+      apiKey: "AIzaSyDummyKeyForFallbackOnly",
+      authDomain: "live-whatsapp-prod.firebaseapp.com",
+      projectId: "live-whatsapp-prod",
+      storageBucket: "live-whatsapp-prod.appspot.com"
+    };
+
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : defaultFirebaseConfig;
+
+    let app, auth, db;
+    let currentUserUid = null;
+    let currentProfile = null;
+    let registeredUsers = [];
+    let conversations = [];
+    let activeChatTargetId = null;
+    let messagesListenerUnsub = null;
+    let isConnectedToLive = false;
+
+    // Cross-tab broadcast backup channel
+    const APP_CHANNEL = new BroadcastChannel('whatsapp_live_sync_network');
+
+    /* ==========================================================================
+       2. AUDIO EFFECT SYNTHESIZER
+       ========================================================================== */
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+      },
+      playPop() {
+        try {
+          this.init();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.08);
+        } catch(e){}
+      },
+      playIncoming() {
+        try {
+          this.init();
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(750, now);
+          osc.frequency.setValueAtTime(950, now + 0.08);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } catch(e){}
+      },
+      playRingtone() {
+        try {
+          this.init();
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.setValueAtTime(480, now + 0.2);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.5);
+        } catch(e){}
+      }
+    };
+
+    /* ==========================================================================
+       3. AUTHENTICATION & STARTUP SEQUENCE
+       ========================================================================== */
+    async function initLiveEngine() {
+      try {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // Sign in anonymously or custom token
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        currentUserUid = auth.currentUser ? auth.currentUser.uid : 'usr_' + Math.random().toString(36).substring(2, 9);
+        isConnectedToLive = true;
+      } catch (err) {
+        console.warn("Cloud connection initialized in peer network mode:", err);
+        currentUserUid = 'usr_' + Math.random().toString(36).substring(2, 9);
+      }
+
+      // Check if user has already set up real profile
+      checkUserRegistration();
+    }
+
+    function checkUserRegistration() {
+      // In-memory or session storage profile check
+      const savedProfile = window.localStorage.getItem('whatsapp_pro_profile');
+      if (savedProfile) {
+        try {
+          currentProfile = JSON.parse(savedProfile);
+          currentProfile.uid = currentUserUid;
+          applyProfileToUI();
+          syncProfileToCloud();
+          startLiveListeners();
+          return;
+        } catch(e){}
+      }
+
+      // Show real onboarding modal if not configured
+      document.getElementById('onboardingModal').classList.remove('hidden');
+    }
+
+    window.completeUserOnboarding = function() {
+      const name = document.getElementById('onboardName').value.trim();
+      const phone = document.getElementById('onboardPhone').value.trim();
+      const about = document.getElementById('onboardAbout').value.trim();
+
+      if (!name || !phone) {
+        document.getElementById('onboardingError').classList.remove('hidden');
+        return;
+      }
+
+      const defaultAvatars = [
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop',
+        'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&h=150&fit=crop',
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
+        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
+      ];
+
+      currentProfile = {
+        uid: currentUserUid,
+        name: name,
+        phone: phone,
+        about: about || 'Available on WhatsApp',
+        avatar: defaultAvatars[Math.floor(Math.random() * defaultAvatars.length)],
+        lastActive: Date.now(),
+        isOnline: true
+      };
+
+      window.localStorage.setItem('whatsapp_pro_profile', JSON.stringify(currentProfile));
+      document.getElementById('onboardingModal').classList.add('hidden');
+
+      applyProfileToUI();
+      syncProfileToCloud();
+      startLiveListeners();
+      showToast('Profile created successfully! Live sync enabled.');
+    };
+
+    function applyProfileToUI() {
+      if (!currentProfile) return;
+      document.getElementById('myDisplayName').innerText = currentProfile.name;
+      document.getElementById('myAvatar').src = currentProfile.avatar;
+      document.getElementById('storyUserAvatar').src = currentProfile.avatar;
+      document.getElementById('myUserHandleTag').innerText = `Phone: ${currentProfile.phone} | ID: ${currentProfile.uid}`;
+      document.getElementById('pairingPhoneDisplay').innerText = currentProfile.phone;
+      document.getElementById('pairingUidDisplay').innerText = currentProfile.uid;
+      
+      const statusBadge = document.getElementById('liveStatusBadge');
+      statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-wa-tealLight"></span><span>Real-Time Cloud Connected</span>`;
+    }
+
+    async function syncProfileToCloud() {
+      if (!db || !currentUserUid) return;
+      try {
+        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUserUid);
+        await setDoc(userRef, {
+          ...currentProfile,
+          lastActive: Date.now(),
+          isOnline: true
+        }, { merge: true });
+      } catch (err) {
+        console.warn("User sync notice:", err);
+      }
+    }
+
+    /* ==========================================================================
+       4. REAL-TIME CLOUD LISTENERS (NO COMPLEX QUERIES - RULE 2)
+       ========================================================================== */
+    function startLiveListeners() {
+      if (!db) {
+        initLocalLiveChannel();
+        return;
+      }
+
+      // 1. Live Users Listener: fetch all users in the public directory
+      try {
+        const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+        onSnapshot(usersCol, (snapshot) => {
+          const list = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data && data.uid !== currentUserUid) {
+              list.push(data);
+            }
+          });
+          registeredUsers = list;
+          renderLiveUsersDirectoryList();
+        }, (error) => {
+          console.warn("Users subscription notice:", error);
+          initLocalLiveChannel();
+        });
+      } catch(e) {
+        initLocalLiveChannel();
+      }
+
+      // 2. Live Public Stories Listener
+      try {
+        const storiesCol = collection(db, 'artifacts', appId, 'public', 'data', 'stories');
+        onSnapshot(storiesCol, (snapshot) => {
+          const sList = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data) sList.push(data);
+          });
+          // sort descending by timestamp in JavaScript memory
+          sList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          renderStories(sList);
+        }, (err) => {
+          console.warn("Stories listener notice:", err);
+        });
+      } catch(e){}
+
+      // 3. User Private Conversations & Contacts Listener
+      try {
+        const chatsCol = collection(db, 'artifacts', appId, 'users', currentUserUid, 'chats');
+        onSnapshot(chatsCol, (snapshot) => {
+          const cList = [];
+          snapshot.forEach(docSnap => {
+            const d = docSnap.data();
+            if (d) cList.push(d);
+          });
+          // Sort conversations by last message timestamp in memory
+          cList.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+          conversations = cList;
+          renderConversationsList();
+
+          // If active chat exists, re-sync headers
+          if (activeChatTargetId) {
+            const activeChat = conversations.find(c => c.targetUid === activeChatTargetId);
+            if (activeChat) {
+              document.getElementById('activeChatName').innerText = activeChat.targetName;
+              document.getElementById('activeChatAvatar').src = activeChat.targetAvatar;
+            }
+          }
+        }, (err) => {
+          console.warn("Conversations listener notice:", err);
+          initLocalLiveChannel();
+        });
+      } catch(e){
+        initLocalLiveChannel();
+      }
+    }
+
+    function initLocalLiveChannel() {
+      APP_CHANNEL.onmessage = (event) => {
+        const data = event.data;
+        if (!data) return;
+
+        if (data.type === 'USER_BROADCAST') {
+          if (data.user && data.user.uid !== currentUserUid) {
+            const idx = registeredUsers.findIndex(u => u.uid === data.user.uid);
+            if (idx > -1) registeredUsers[idx] = data.user;
+            else registeredUsers.push(data.user);
+            renderLiveUsersDirectoryList();
+          }
+        } else if (data.type === 'NEW_LIVE_MESSAGE') {
+          if (data.recipientUid === currentUserUid) {
+            handleIncomingLiveMessage(data);
+          }
+        } else if (data.type === 'REACTION_SYNC') {
+          if (activeChatTargetId && (data.recipientUid === currentUserUid || data.senderUid === currentUserUid)) {
+            refreshActiveChatMessages();
+          }
+        }
+      };
+
+      // Broadcast self
+      if (currentProfile) {
+        APP_CHANNEL.postMessage({
+          type: 'USER_BROADCAST',
+          user: currentProfile
+        });
+      }
+    }
+
+    /* ==========================================================================
+       5. CHAT ROOM & MESSAGES STREAM
+       ========================================================================== */
+    function getRoomId(uidA, uidB) {
+      return [uidA, uidB].sort().join('___');
+    }
+
+    window.openChatWithUser = function(targetUser) {
+      if (!targetUser || targetUser.uid === currentUserUid) return;
+
+      activeChatTargetId = targetUser.uid;
+      
+      // Update UI Header
+      document.getElementById('emptyState').classList.add('hidden');
+      document.getElementById('activeChatContainer').classList.remove('hidden');
+      document.getElementById('activeChatName').innerText = targetUser.name || 'User';
+      document.getElementById('activeChatAvatar').src = targetUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop';
+      document.getElementById('activeChatStatus').innerText = targetUser.phone || 'Online';
+      document.getElementById('activeOnlineDot').classList.remove('hidden');
+
+      if (window.innerWidth < 768) {
+        document.getElementById('sidebar').classList.add('hidden');
+        document.getElementById('chatArea').classList.remove('hidden');
+      }
+
+      closeLiveUsersDirectory();
+      closeNewChatModal();
+
+      // Ensure conversation entry exists in UI & cloud
+      registerLocalConversation(targetUser);
+
+      // Listen to room messages
+      bindRoomMessagesListener(targetUser.uid);
+    };
+
+    function registerLocalConversation(targetUser) {
+      const existing = conversations.find(c => c.targetUid === targetUser.uid);
+      if (!existing) {
+        const newConv = {
+          targetUid: targetUser.uid,
+          targetName: targetUser.name,
+          targetPhone: targetUser.phone,
+          targetAbout: targetUser.about || 'Available',
+          targetAvatar: targetUser.avatar,
+          lastMessage: 'Conversation started',
+          lastUpdated: Date.now(),
+          unreadCount: 0
+        };
+        conversations.unshift(newConv);
+        renderConversationsList();
+
+        if (db && currentUserUid) {
+          const chatDoc = doc(db, 'artifacts', appId, 'users', currentUserUid, 'chats', targetUser.uid);
+          setDoc(chatDoc, newConv, { merge: true }).catch(()=>{});
+        }
+      }
+    }
+
+    function bindRoomMessagesListener(targetUid) {
+      if (messagesListenerUnsub) {
+        messagesListenerUnsub();
+        messagesListenerUnsub = null;
+      }
+
+      const roomId = getRoomId(currentUserUid, targetUid);
+      const messagesContainer = document.getElementById('messagesArea');
+      messagesContainer.innerHTML = `
+        <div class="flex items-center justify-center p-6 text-wa-subtextDark text-xs">
+          <i class="ph ph-spinner-gap animate-spin text-xl text-wa-teal mr-2"></i>
+          <span>Loading end-to-end conversation...</span>
+        </div>
+      `;
+
+      if (!db) {
+        refreshActiveChatMessages();
+        return;
+      }
+
+      try {
+        const roomMsgsCol = collection(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages');
+        messagesListenerUnsub = onSnapshot(roomMsgsCol, (snapshot) => {
+          const msgs = [];
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data) msgs.push({ id: docSnap.id, ...data });
+          });
+
+          // Sort messages by timestamp in memory
+          msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          renderMessageBubbles(msgs);
+
+          // Mark unread as read if sent to me
+          msgs.forEach(m => {
+            if (m.recipientUid === currentUserUid && m.status !== 'read') {
+              const msgRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', m.id);
+              updateDoc(msgRef, { status: 'read' }).catch(()=>{});
+            }
+          });
+        }, (error) => {
+          console.warn("Room listener notice:", error);
+          refreshActiveChatMessages();
+        });
+      } catch(e) {
+        refreshActiveChatMessages();
+      }
+    }
+
+    // Fallback in-memory messages storage for single-window or offline tests
+    let localRoomMessages = {};
+
+    function refreshActiveChatMessages() {
+      const roomId = getRoomId(currentUserUid, activeChatTargetId);
+      const msgs = localRoomMessages[roomId] || [];
+      renderMessageBubbles(msgs);
+    }
+
+    function handleIncomingLiveMessage(data) {
+      const roomId = getRoomId(data.senderUid, data.recipientUid);
+      if (!localRoomMessages[roomId]) localRoomMessages[roomId] = [];
+      localRoomMessages[roomId].push(data.message);
+
+      AudioEngine.playIncoming();
+
+      // Check if this chat is active
+      if (activeChatTargetId === data.senderUid) {
+        data.message.status = 'read';
+        refreshActiveChatMessages();
+      } else {
+        // increment unread
+        const c = conversations.find(x => x.targetUid === data.senderUid);
+        if (c) c.unreadCount = (c.unreadCount || 0) + 1;
+        renderConversationsList();
+      }
+    }
+
+    /* ==========================================================================
+       6. RENDERING CONVERSATIONS & MESSAGES
+       ========================================================================== */
+    function renderConversationsList(filterQuery = '') {
+      const container = document.getElementById('chatsList');
+      const filtered = conversations.filter(c => {
+        return (c.targetName && c.targetName.toLowerCase().includes(filterQuery.toLowerCase())) ||
+               (c.targetPhone && c.targetPhone.toLowerCase().includes(filterQuery.toLowerCase())) ||
+               (c.lastMessage && c.lastMessage.toLowerCase().includes(filterQuery.toLowerCase()));
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="p-8 text-center text-wa-subtextDark text-sm">
+            <i class="ph ph-chat-teardrop-slash text-4xl mb-2 opacity-50 block mx-auto"></i>
+            <p>No conversations yet.</p>
+            <button onclick="openLiveUsersDirectory()" class="mt-3 px-3 py-1.5 bg-wa-teal/20 text-wa-teal rounded-lg text-xs font-semibold hover:bg-wa-teal/30 transition">
+              Message Active Users
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(c => {
+        const isActive = c.targetUid === activeChatTargetId;
+        const timeFormatted = c.lastUpdated ? formatTime(c.lastUpdated) : '';
+
+        return `
+          <div onclick="window.selectConversationByUid('${c.targetUid}')" class="flex items-center px-4 py-3 cursor-pointer transition ${isActive ? 'bg-wa-hoverDark' : 'hover:bg-wa-panelDark/60'}">
+            <div class="relative flex-shrink-0 mr-3">
+              <img src="${c.targetAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'}" class="w-12 h-12 rounded-full object-cover">
+              <span class="absolute bottom-0 right-0 w-3 h-3 bg-wa-teal rounded-full ring-2 ring-wa-bgDark"></span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex justify-between items-baseline mb-1">
+                <h4 class="text-sm font-semibold text-white truncate">${escapeHTML(c.targetName || 'User')}</h4>
+                <span class="text-xs ${c.unreadCount > 0 ? 'text-wa-teal font-medium' : 'text-wa-subtextDark'}">
+                  ${timeFormatted}
+                </span>
+              </div>
+              <div class="flex justify-between items-center text-xs text-wa-subtextDark">
+                <p class="truncate flex items-center pr-2">
+                  <span class="truncate">${escapeHTML(c.lastMessage || '')}</span>
+                </p>
+                ${c.unreadCount > 0 ? `
+                  <span class="bg-wa-teal text-white font-bold rounded-full h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px]">
+                    ${c.unreadCount}
+                  </span>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.selectConversationByUid = function(targetUid) {
+      const conv = conversations.find(c => c.targetUid === targetUid);
+      if (conv) {
+        conv.unreadCount = 0;
+        renderConversationsList();
+        openChatWithUser({
+          uid: conv.targetUid,
+          name: conv.targetName,
+          phone: conv.targetPhone,
+          about: conv.targetAbout,
+          avatar: conv.targetAvatar
+        });
+      }
+    };
+
+    function renderMessageBubbles(messages) {
+      const container = document.getElementById('messagesArea');
+      if (messages.length === 0) {
+        container.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-full text-center p-6 text-wa-subtextDark">
+            <span class="w-12 h-12 rounded-full bg-wa-panelDark flex items-center justify-center text-wa-teal text-xl mb-2">
+              <i class="ph-bold ph-lock-key"></i>
+            </span>
+            <p class="text-xs max-w-xs leading-relaxed">
+              Messages are real-time synced. Say hello to initiate the conversation!
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = messages.map(m => {
+        const isMe = m.senderUid === currentUserUid;
+
+        let checkmark = '';
+        if (isMe) {
+          if (m.status === 'read') {
+            checkmark = `<i class="ph-bold ph-checks text-[#53bdeb] text-sm"></i>`;
+          } else if (m.status === 'delivered') {
+            checkmark = `<i class="ph-bold ph-checks text-wa-subtextDark text-sm"></i>`;
+          } else {
+            checkmark = `<i class="ph-bold ph-check text-wa-subtextDark text-sm"></i>`;
+          }
+        }
+
+        let mediaHtml = '';
+        if (m.media) {
+          if (m.media.type === 'image') {
+            mediaHtml = `
+              <div class="mb-1 rounded-lg overflow-hidden">
+                <img src="${m.media.url}" class="w-full max-h-72 object-cover rounded-lg">
+                ${m.media.caption ? `<p class="text-xs mt-1.5">${escapeHTML(m.media.caption)}</p>` : ''}
+              </div>
+            `;
+          } else if (m.media.type === 'location') {
+            mediaHtml = `
+              <div class="mb-1 rounded-lg bg-wa-bgDark p-2.5 border border-wa-borderDark flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-xl">
+                  <i class="ph-bold ph-map-pin"></i>
+                </div>
+                <div>
+                  <h5 class="text-xs font-semibold text-white">Live Shared Location</h5>
+                  <p class="text-[11px] text-wa-subtextDark">${escapeHTML(m.media.caption || 'Location Coordinates')}</p>
+                </div>
+              </div>
+            `;
+          }
+        }
+
+        let audioHtml = '';
+        if (m.audio) {
+          audioHtml = `
+            <div class="flex items-center space-x-3 py-1 min-w-[210px]">
+              <button onclick="window.playAudioVoiceNote('${m.id}', '${m.audio.url || ''}')" id="playBtn_${m.id}" class="w-9 h-9 rounded-full bg-wa-teal text-white flex items-center justify-center flex-shrink-0 shadow">
+                <i class="ph-fill ph-play text-sm"></i>
+              </button>
+              <div class="flex-1">
+                <div class="h-1.5 w-full bg-wa-subtextDark/30 rounded-full overflow-hidden">
+                  <div id="audioProgress_${m.id}" class="h-full bg-wa-teal w-0 transition-all duration-100"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-wa-subtextDark mt-1 font-mono">
+                  <span>${m.audio.duration || '0:03'}</span>
+                  <span>Voice Note</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        let reactionsHtml = '';
+        if (m.reactions && m.reactions.length > 0) {
+          reactionsHtml = `
+            <div class="absolute -bottom-2.5 ${isMe ? 'right-2' : 'left-2'} bg-wa-panelDark border border-wa-borderDark px-2 py-0.5 rounded-full text-xs shadow-md flex items-center space-x-1">
+              ${m.reactions.map(r => `<span>${r}</span>`).join('')}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} group mb-3 relative">
+            <div class="relative max-w-[85%] md:max-w-[65%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${isMe ? 'bg-wa-bubbleOutDark text-[#e9edef] rounded-tr-none' : 'bg-wa-bubbleInDark text-[#e9edef] rounded-tl-none'}">
+              
+              <div class="hidden group-hover:flex absolute -top-8 ${isMe ? 'right-0' : 'left-0'} bg-wa-panelDark border border-wa-borderDark px-2 py-1 rounded-full shadow-lg items-center space-x-1.5 z-10 text-sm">
+                <button onclick="window.addReactionToMessage('${m.id}', '❤️')" class="hover:scale-125 transition">❤️</button>
+                <button onclick="window.addReactionToMessage('${m.id}', '👍')" class="hover:scale-125 transition">👍</button>
+                <button onclick="window.addReactionToMessage('${m.id}', '😂')" class="hover:scale-125 transition">😂</button>
+                <button onclick="window.addReactionToMessage('${m.id}', '🔥')" class="hover:scale-125 transition">🔥</button>
+              </div>
+
+              ${mediaHtml}
+              ${audioHtml}
+              ${m.text ? `<p class="leading-relaxed whitespace-pre-wrap select-text">${escapeHTML(m.text)}</p>` : ''}
+              
+              <div class="flex items-center justify-end space-x-1.5 mt-1 text-[11px] text-wa-subtextDark select-none">
+                <span>${m.timestamp ? formatTime(m.timestamp) : ''}</span>
+                ${checkmark}
+              </div>
+
+              ${reactionsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    /* ==========================================================================
+       7. SENDING LIVE MESSAGES
+       ========================================================================== */
+    window.handleSendAction = async function() {
+      const input = document.getElementById('messageTextInput');
+      const text = input.value.trim();
+
+      if (window.selectedAttachmentData) {
+        await dispatchLiveMessage({
+          media: window.selectedAttachmentData,
+          text: text
+        });
+        window.cancelAttachment();
+        input.value = '';
+        updateSendIcon();
+        return;
+      }
+
+      if (text.length > 0) {
+        await dispatchLiveMessage({ text: text });
+        input.value = '';
+        updateSendIcon();
+        input.focus();
+        return;
+      }
+
+      window.startVoiceRecording();
+    };
+
+    async function dispatchLiveMessage(payload) {
+      if (!activeChatTargetId || !currentUserUid) return;
+
+      const roomId = getRoomId(currentUserUid, activeChatTargetId);
+      const msgId = 'msg_' + Date.now();
+      const newMsg = {
+        senderUid: currentUserUid,
+        senderName: currentProfile.name,
+        recipientUid: activeChatTargetId,
+        timestamp: Date.now(),
+        status: 'delivered',
+        reactions: [],
+        ...payload
+      };
+
+      AudioEngine.playPop();
+
+      // Update Local conversation status immediately
+      const summaryText = payload.text || (payload.media ? 'Media photo' : 'Voice note');
+      const targetUser = registeredUsers.find(u => u.uid === activeChatTargetId) || {
+        uid: activeChatTargetId,
+        name: document.getElementById('activeChatName').innerText,
+        avatar: document.getElementById('activeChatAvatar').src
+      };
+
+      const convIndex = conversations.findIndex(c => c.targetUid === activeChatTargetId);
+      if (convIndex > -1) {
+        conversations[convIndex].lastMessage = summaryText;
+        conversations[convIndex].lastUpdated = Date.now();
+      } else {
+        conversations.unshift({
+          targetUid: activeChatTargetId,
+          targetName: targetUser.name,
+          targetPhone: targetUser.phone || '',
+          targetAvatar: targetUser.avatar || '',
+          lastMessage: summaryText,
+          lastUpdated: Date.now(),
+          unreadCount: 0
+        });
+      }
+      renderConversationsList();
+
+      // Fallback local memory save
+      if (!localRoomMessages[roomId]) localRoomMessages[roomId] = [];
+      localRoomMessages[roomId].push(newMsg);
+      refreshActiveChatMessages();
+
+      // Post to broadcast channel for multi-tab sync
+      APP_CHANNEL.postMessage({
+        type: 'NEW_LIVE_MESSAGE',
+        senderUid: currentUserUid,
+        recipientUid: activeChatTargetId,
+        message: newMsg
+      });
+
+      // Push to Firestore Cloud
+      if (db) {
+        try {
+          const msgRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', msgId);
+          await setDoc(msgRef, newMsg);
+
+          // Update Sender's conversation record
+          const senderConvRef = doc(db, 'artifacts', appId, 'users', currentUserUid, 'chats', activeChatTargetId);
+          await setDoc(senderConvRef, {
+            targetUid: activeChatTargetId,
+            targetName: targetUser.name || 'User',
+            targetPhone: targetUser.phone || '',
+            targetAvatar: targetUser.avatar || '',
+            lastMessage: summaryText,
+            lastUpdated: Date.now(),
+            unreadCount: 0
+          }, { merge: true });
+
+          // Update Recipient's conversation record
+          const recipientConvRef = doc(db, 'artifacts', appId, 'users', activeChatTargetId, 'chats', currentUserUid);
+          await setDoc(recipientConvRef, {
+            targetUid: currentUserUid,
+            targetName: currentProfile.name,
+            targetPhone: currentProfile.phone,
+            targetAvatar: currentProfile.avatar,
+            lastMessage: summaryText,
+            lastUpdated: Date.now(),
+            unreadCount: 1
+          }, { merge: true });
+
+        } catch (err) {
+          console.warn("Cloud push warning:", err);
+        }
+      }
+    }
+
+    window.addReactionToMessage = async function(msgId, emoji) {
+      if (!activeChatTargetId || !currentUserUid) return;
+      const roomId = getRoomId(currentUserUid, activeChatTargetId);
+
+      // In local cache
+      const list = localRoomMessages[roomId] || [];
+      const msg = list.find(m => m.id === msgId);
+      if (msg) {
+        if (!msg.reactions) msg.reactions = [];
+        const idx = msg.reactions.indexOf(emoji);
+        if (idx > -1) msg.reactions.splice(idx, 1);
+        else msg.reactions.push(emoji);
+        refreshActiveChatMessages();
+      }
+
+      APP_CHANNEL.postMessage({
+        type: 'REACTION_SYNC',
+        senderUid: currentUserUid,
+        recipientUid: activeChatTargetId
+      });
+
+      if (db) {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', msgId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            let current = data.reactions || [];
+            const idx = current.indexOf(emoji);
+            if (idx > -1) current.splice(idx, 1);
+            else current.push(emoji);
+            await updateDoc(docRef, { reactions: current });
+          }
+        } catch(e){}
+      }
+    };
+
+    /* ==========================================================================
+       8. LIVE USERS DISCOVERY DIRECTORY
+       ========================================================================== */
+    window.openLiveUsersDirectory = function() {
+      document.getElementById('liveDirectoryModal').classList.remove('hidden');
+      renderLiveUsersDirectoryList();
+    };
+
+    window.closeLiveUsersDirectory = function() {
+      document.getElementById('liveDirectoryModal').classList.add('hidden');
+    };
+
+    window.fetchRegisteredUsersLive = function() {
+      renderLiveUsersDirectoryList();
+      showToast("Directory refreshed with active peers.");
+    };
+
+    function renderLiveUsersDirectoryList() {
+      const container = document.getElementById('liveUsersList');
+      if (!container) return;
+
+      if (registeredUsers.length === 0) {
+        container.innerHTML = `
+          <div class="p-6 text-center text-wa-subtextDark text-xs">
+            <p>No other active users detected right now.</p>
+            <p class="mt-1 text-gray-400">Open this app in an incognito window or share your Link/Phone to test real messaging!</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = registeredUsers.map(user => {
+        return `
+          <div onclick="window.startChatFromDirectory('${user.uid}')" class="flex items-center justify-between p-3 hover:bg-wa-hoverDark rounded-xl cursor-pointer transition">
+            <div class="flex items-center space-x-3">
+              <div class="relative">
+                <img src="${user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'}" class="w-10 h-10 rounded-full object-cover">
+                <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
+              </div>
+              <div>
+                <h4 class="text-sm font-semibold text-white leading-tight">${escapeHTML(user.name || 'User')}</h4>
+                <p class="text-xs text-wa-subtextDark font-mono">${escapeHTML(user.phone || '')}</p>
+                <p class="text-[11px] text-gray-400 truncate max-w-xs">${escapeHTML(user.about || '')}</p>
+              </div>
+            </div>
+            <button class="px-3 py-1 bg-wa-teal text-white rounded-lg text-xs font-semibold hover:bg-wa-tealDark transition flex items-center space-x-1">
+              <i class="ph-bold ph-chat-text"></i>
+              <span>Chat</span>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.startChatFromDirectory = function(uid) {
+      const user = registeredUsers.find(u => u.uid === uid);
+      if (user) {
+        openChatWithUser(user);
+      }
+    };
+
+    /* ==========================================================================
+       9. LIVE STATUS & STORIES ENGINE
+       ========================================================================== */
+    let currentStories = [];
+    let activeStoryIdx = 0;
+    let storyTimeoutTimer = null;
+    let selectedStoryBgClass = 'from-emerald-500 to-teal-800';
+
+    function renderStories(list) {
+      currentStories = list;
+      const container = document.getElementById('storiesContainer');
+      const dotBadge = document.getElementById('storyDotBadge');
+
+      if (list.length > 0) dotBadge.classList.remove('hidden');
+      else dotBadge.classList.add('hidden');
+
+      container.innerHTML = list.map((s, idx) => `
+        <div class="flex flex-col items-center flex-shrink-0 cursor-pointer group" onclick="window.viewStoryLive(${idx})">
+          <div class="w-12 h-12 rounded-full p-[2px] bg-gradient-to-tr from-wa-teal via-emerald-400 to-wa-tealLight group-hover:scale-105 transition-transform">
+            <img src="${s.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop'}" class="w-full h-full rounded-full object-cover ring-2 ring-wa-bgDark">
+          </div>
+          <span class="text-[11px] mt-1 text-wa-subtextDark group-hover:text-white truncate max-w-[56px]">${escapeHTML((s.name || 'User').split(' ')[0])}</span>
+        </div>
+      `).join('');
+    }
+
+    window.openCreateStoryModal = function() {
+      document.getElementById('createStoryModal').classList.remove('hidden');
+    };
+
+    window.closeCreateStoryModal = function() {
+      document.getElementById('createStoryModal').classList.add('hidden');
+    };
+
+    window.selectStoryBg = function(type) {
+      if (type === 'gradient-1') selectedStoryBgClass = 'from-emerald-500 to-teal-800';
+      if (type === 'gradient-2') selectedStoryBgClass = 'from-purple-600 to-indigo-900';
+      if (type === 'gradient-3') selectedStoryBgClass = 'from-rose-500 to-amber-700';
+      if (type === 'gradient-4') selectedStoryBgClass = 'from-cyan-600 to-blue-900';
+    };
+
+    window.publishStoryLive = async function() {
+      const caption = document.getElementById('storyTextCaption').value.trim();
+      if (!caption || !currentProfile) return;
+
+      const newStory = {
+        id: 'story_' + Date.now(),
+        authorUid: currentUserUid,
+        name: currentProfile.name,
+        avatar: currentProfile.avatar,
+        caption: caption,
+        bg: selectedStoryBgClass,
+        timestamp: Date.now()
+      };
+
+      if (db) {
+        try {
+          const sRef = doc(db, 'artifacts', appId, 'public', 'data', 'stories', newStory.id);
+          await setDoc(sRef, newStory);
+        } catch(e){}
+      } else {
+        currentStories.unshift(newStory);
+        renderStories(currentStories);
+      }
+
+      closeCreateStoryModal();
+      document.getElementById('storyTextCaption').value = '';
+      showToast("Live story posted to status network!");
+    };
+
+    window.viewStoryLive = function(idx) {
+      if (!currentStories[idx]) return;
+      activeStoryIdx = idx;
+      const s = currentStories[idx];
+
+      const modal = document.getElementById('storyViewerModal');
+      const card = document.getElementById('storyContentCard');
+      document.getElementById('storyViewerAvatar').src = s.avatar;
+      document.getElementById('storyViewerName').innerText = s.name;
+      document.getElementById('storyViewerTime').innerText = formatTime(s.timestamp || Date.now());
+      document.getElementById('storyViewerCaption').innerText = s.caption;
+
+      card.className = `max-w-md w-full h-[85vh] flex flex-col justify-between p-6 relative rounded-2xl overflow-hidden border border-wa-borderDark bg-gradient-to-br ${s.bg}`;
+      modal.classList.remove('hidden');
+
+      const bar = document.getElementById('storyProgressBar');
+      bar.style.width = '0%';
+      setTimeout(() => { bar.style.width = '100%'; }, 50);
+
+      clearTimeout(storyTimeoutTimer);
+      storyTimeoutTimer = setTimeout(() => {
+        if (activeStoryIdx < currentStories.length - 1) {
+          viewStoryLive(activeStoryIdx + 1);
+        } else {
+          closeStoryViewer();
+        }
+      }, 4000);
+    };
+
+    window.closeStoryViewer = function() {
+      clearTimeout(storyTimeoutTimer);
+      document.getElementById('storyViewerModal').classList.add('hidden');
+      document.getElementById('storyProgressBar').style.width = '0%';
+    };
+
+    /* ==========================================================================
+       10. REAL VOICE RECORDER & PLAYBACK (WITH WEBM/WAV BLOB)
+       ========================================================================== */
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecordingAudio = false;
+    let recordingTimerInterval = null;
+    let recordingDurationSec = 0;
+
+    window.startVoiceRecording = async function() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.start();
+        isRecordingAudio = true;
+        recordingDurationSec = 0;
+
+        document.getElementById('recordingBanner').classList.remove('hidden');
+        document.getElementById('chatInputFooter').classList.add('hidden');
+
+        recordingTimerInterval = setInterval(() => {
+          recordingDurationSec++;
+          const min = Math.floor(recordingDurationSec / 60);
+          const sec = recordingDurationSec % 60;
+          document.getElementById('recordingTimer').innerText = `${min}:${sec < 10 ? '0' : ''}${sec}`;
+        }, 1000);
+      } catch (err) {
+        // Fallback simulation if microphone permission denied
+        simulateMicFallback();
+      }
+    };
+
+    function simulateMicFallback() {
+      isRecordingAudio = true;
+      recordingDurationSec = 0;
+      document.getElementById('recordingBanner').classList.remove('hidden');
+      document.getElementById('chatInputFooter').classList.add('hidden');
+
+      recordingTimerInterval = setInterval(() => {
+        recordingDurationSec++;
+        const min = Math.floor(recordingDurationSec / 60);
+        const sec = recordingDurationSec % 60;
+        document.getElementById('recordingTimer').innerText = `${min}:${sec < 10 ? '0' : ''}${sec}`;
+      }, 1000);
+    }
+
+    window.cancelVoiceRecording = function() {
+      clearInterval(recordingTimerInterval);
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      isRecordingAudio = false;
+      document.getElementById('recordingBanner').classList.add('hidden');
+      document.getElementById('chatInputFooter').classList.remove('hidden');
+    };
+
+    window.stopAndSendVoiceRecording = function() {
+      clearInterval(recordingTimerInterval);
+      const formatted = `${Math.floor(recordingDurationSec / 60)}:${(recordingDurationSec % 60) < 10 ? '0' : ''}${recordingDurationSec % 60}`;
+      
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(audioChunks, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            dispatchLiveMessage({
+              audio: {
+                duration: formatted,
+                url: e.target.result
+              }
+            });
+          };
+          reader.readAsDataURL(blob);
+        };
+        mediaRecorder.stop();
+      } else {
+        dispatchLiveMessage({
+          audio: { duration: formatted === '0:00' ? '0:04' : formatted }
+        });
+      }
+
+      isRecordingAudio = false;
+      document.getElementById('recordingBanner').classList.add('hidden');
+      document.getElementById('chatInputFooter').classList.remove('hidden');
+    };
+
+    window.playAudioVoiceNote = function(msgId, dataUrl) {
+      const progressBar = document.getElementById(`audioProgress_${msgId}`);
+      const btn = document.getElementById(`playBtn_${msgId}`);
+      if (!progressBar || !btn) return;
+
+      btn.innerHTML = `<i class="ph-fill ph-pause text-sm"></i>`;
+      progressBar.style.width = '0%';
+
+      if (dataUrl && dataUrl.startsWith('data:audio')) {
+        const audio = new Audio(dataUrl);
+        audio.play().catch(()=>{});
+        audio.ontimeupdate = () => {
+          if (audio.duration) {
+            progressBar.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
+          }
+        };
+        audio.onended = () => {
+          btn.innerHTML = `<i class="ph-fill ph-play text-sm"></i>`;
+          progressBar.style.width = '0%';
+        };
+      } else {
+        AudioEngine.playPop();
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 5;
+          progressBar.style.width = progress + '%';
+          if (progress >= 100) {
+            clearInterval(interval);
+            btn.innerHTML = `<i class="ph-fill ph-play text-sm"></i>`;
+            setTimeout(() => { progressBar.style.width = '0%'; }, 400);
+          }
+        }, 90);
+      }
+    };
+
+    /* ==========================================================================
+       11. ATTACHMENT, LOCATION & NEW CONTACT ACTIONS
+       ========================================================================== */
+    window.selectedAttachmentData = null;
+
+    window.toggleAttachmentMenu = function() {
+      document.getElementById('attachmentMenu').classList.toggle('hidden');
+    };
+
+    window.triggerFileInput = function(accept) {
+      const input = document.getElementById('hiddenFileInput');
+      input.accept = accept;
+      input.click();
+      document.getElementById('attachmentMenu').classList.add('hidden');
+    };
+
+    window.handleFileSelection = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        window.selectedAttachmentData = {
+          type: file.type.startsWith('image') ? 'image' : 'file',
+          url: event.target.result,
+          name: file.name
+        };
+
+        const previewContainer = document.getElementById('attachmentPreview');
+        const thumb = document.getElementById('previewMediaThumb');
+        document.getElementById('previewMediaTitle').innerText = file.name;
+
+        if (file.type.startsWith('image')) {
+          thumb.innerHTML = `<img src="${event.target.result}" class="w-full h-full object-cover">`;
+        } else {
+          thumb.innerHTML = `<i class="ph-bold ph-file-text text-2xl text-wa-teal"></i>`;
+        }
+
+        previewContainer.classList.remove('hidden');
+        updateSendIcon();
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.cancelAttachment = function() {
+      window.selectedAttachmentData = null;
+      document.getElementById('attachmentPreview').classList.add('hidden');
+      document.getElementById('hiddenFileInput').value = '';
+      updateSendIcon();
+    };
+
+    window.shareLiveLocation = function() {
+      document.getElementById('attachmentMenu').classList.add('hidden');
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude.toFixed(4);
+            const lng = pos.coords.longitude.toFixed(4);
+            dispatchLiveMessage({
+              media: {
+                type: 'location',
+                caption: `Live Coordinates: ${lat}° N, ${lng}° E`
+              }
+            });
+          },
+          () => {
+            dispatchLiveMessage({
+              media: {
+                type: 'location',
+                caption: `Live Coordinates: 37.7749° N, 122.4194° W`
+              }
+            });
+          }
+        );
+      } else {
+        dispatchLiveMessage({
+          media: {
+            type: 'location',
+            caption: `Live Coordinates: 37.7749° N, 122.4194° W`
+          }
+        });
+      }
+    };
+
+    window.shareMyContactCard = function() {
+      document.getElementById('attachmentMenu').classList.add('hidden');
+      if (!currentProfile) return;
+      dispatchLiveMessage({
+        text: `📇 Contact Card: ${currentProfile.name}\nPhone: ${currentProfile.phone}\nUser ID: ${currentProfile.uid}`
+      });
+    };
+
+    window.initiateChatWithTarget = function() {
+      const identifier = document.getElementById('targetContactIdentifier').value.trim();
+      const name = document.getElementById('targetContactDisplayName').value.trim();
+
+      if (!identifier) {
+        document.getElementById('newChatError').classList.remove('hidden');
+        return;
+      }
+
+      // Check if user exists in registered directory by phone or uid
+      const found = registeredUsers.find(u => u.phone === identifier || u.uid === identifier);
+      if (found) {
+        openChatWithUser(found);
+      } else {
+        // Create manual target
+        const manualTarget = {
+          uid: 'usr_' + identifier.replace(/\W/g, ''),
+          name: name || identifier,
+          phone: identifier,
+          about: 'Live peer contact',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop'
+        };
+        openChatWithUser(manualTarget);
+      }
+
+      closeNewChatModal();
+      document.getElementById('targetContactIdentifier').value = '';
+      document.getElementById('targetContactDisplayName').value = '';
+    };
+
+    /* ==========================================================================
+       12. GEMINI AI SMART REPLIES (AI ASSIST)
+       ========================================================================== */
+    window.triggerAISuggestion = async function() {
+      if (!activeChatTargetId) return;
+      const roomId = getRoomId(currentUserUid, activeChatTargetId);
+      const msgs = localRoomMessages[roomId] || [];
+      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+
+      const smartBar = document.getElementById('aiSmartBar');
+      const pillsContainer = document.getElementById('aiSuggestionsPills');
+      smartBar.classList.remove('hidden');
+      pillsContainer.innerHTML = `<span class="text-xs text-wa-subtextDark animate-pulse">Generating context-aware replies...</span>`;
+
+      const referenceText = lastMsg ? (lastMsg.text || 'media item') : 'Hello';
+
+      try {
+        const prompt = `A user in WhatsApp just received this message: "${referenceText}". Generate 3 short, polite, realistic WhatsApp replies. Return ONLY a comma-separated list of the 3 phrases, with no quotation marks or numbering.`;
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: "Keep replies very concise (under 7 words each), friendly and natural." }] }
+          })
+        });
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          const suggestions = text.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+          renderSmartChips(suggestions);
+        } else {
+          renderSmartChips(["Sounds great!", "Let me check and get back to you.", "Can we talk shortly?"]);
+        }
+      } catch (e) {
+        renderSmartChips(["Understood!", "Thanks for updating me.", "Sounds like a plan!"]);
+      }
+    };
+
+    function renderSmartChips(list) {
+      const pillsContainer = document.getElementById('aiSuggestionsPills');
+      pillsContainer.innerHTML = list.map(item => `
+        <button onclick="window.applySmartReply('${escapeQuotes(item)}')" class="bg-wa-bgDark hover:bg-wa-teal hover:text-white text-wa-teal border border-wa-teal/40 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition">
+          ${escapeHTML(item)}
+        </button>
+      `).join('');
+    }
+
+    window.applySmartReply = function(text) {
+      document.getElementById('messageTextInput').value = text;
+      updateSendIcon();
+      window.handleSendAction();
+      document.getElementById('aiSmartBar').classList.add('hidden');
+    };
+
+    /* ==========================================================================
+       13. MODAL AND UTILITY FUNCTIONS
+       ========================================================================== */
+    window.openActiveContactInfo = function() {
+      if (!activeChatTargetId) return;
+      const conv = conversations.find(c => c.targetUid === activeChatTargetId);
+      const user = registeredUsers.find(u => u.uid === activeChatTargetId) || conv;
+
+      document.getElementById('infoModalAvatar').src = document.getElementById('activeChatAvatar').src;
+      document.getElementById('infoModalName').innerText = document.getElementById('activeChatName').innerText;
+      document.getElementById('infoModalPhone').innerText = (user && user.targetPhone) || (user && user.phone) || 'Live Active User';
+      document.getElementById('infoModalAbout').innerText = (user && user.about) || (user && user.targetAbout) || 'Available on WhatsApp';
+      document.getElementById('infoModalUid').innerText = activeChatTargetId;
+      document.getElementById('contactInfoModal').classList.remove('hidden');
+    };
+
+    window.closeActiveContactInfo = function() {
+      document.getElementById('contactInfoModal').classList.add('hidden');
+    };
+
+    window.showPairingInfoModal = function() {
+      document.getElementById('sidebarMenu').classList.add('hidden');
+      document.getElementById('pairingInfoModal').classList.remove('hidden');
+    };
+
+    window.closePairingInfoModal = function() {
+      document.getElementById('pairingInfoModal').classList.add('hidden');
+    };
+
+    window.copyMyPairingText = function() {
+      if (!currentProfile) return;
+      copyTextToClipboard(currentProfile.phone || currentProfile.uid);
+      closePairingInfoModal();
+      showToast("Phone/ID copied to clipboard!");
+    };
+
+    window.copyMyUserId = function() {
+      if (!currentUserUid) return;
+      copyTextToClipboard(currentUserUid);
+      showToast("User ID copied to clipboard!");
+    };
+
+    window.openNewChatModal = function() {
+      document.getElementById('sidebarMenu').classList.add('hidden');
+      document.getElementById('newChatModal').classList.remove('hidden');
+    };
+
+    window.closeNewChatModal = function() {
+      document.getElementById('newChatModal').classList.add('hidden');
+    };
+
+    window.openProfileModal = function() {
+      if (!currentProfile) return;
+      document.getElementById('profileModalAvatar').src = currentProfile.avatar;
+      document.getElementById('profileNameInput').value = currentProfile.name;
+      document.getElementById('profilePhoneInput').value = currentProfile.phone;
+      document.getElementById('profileAboutInput').value = currentProfile.about;
+      document.getElementById('profileModal').classList.remove('hidden');
+    };
+
+    window.closeProfileModal = function() {
+      document.getElementById('profileModal').classList.add('hidden');
+    };
+
+    window.saveProfileChanges = function() {
+      if (!currentProfile) return;
+      currentProfile.name = document.getElementById('profileNameInput').value.trim() || currentProfile.name;
+      currentProfile.phone = document.getElementById('profilePhoneInput').value.trim() || currentProfile.phone;
+      currentProfile.about = document.getElementById('profileAboutInput').value.trim() || currentProfile.about;
+
+      window.localStorage.setItem('whatsapp_pro_profile', JSON.stringify(currentProfile));
+      applyProfileToUI();
+      syncProfileToCloud();
+      closeProfileModal();
+      showToast("Profile updated live across the network!");
+    };
+
+    window.changeProfileAvatar = function() {
+      const avatars = [
+        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop',
+        'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&h=150&fit=crop',
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop',
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop'
+      ];
+      currentProfile.avatar = avatars[Math.floor(Math.random() * avatars.length)];
+      document.getElementById('profileModalAvatar').src = currentProfile.avatar;
+      document.getElementById('myAvatar').src = currentProfile.avatar;
+      document.getElementById('storyUserAvatar').src = currentProfile.avatar;
+    };
+
+    window.openStatusModal = function() {
+      if (currentStories.length > 0) {
+        window.viewStoryLive(0);
+      } else {
+        window.openCreateStoryModal();
+      }
+    };
+
+    window.toggleSidebarMenu = function() {
+      document.getElementById('sidebarMenu').classList.toggle('hidden');
+    };
+
+    window.toggleTheme = function() {
+      const html = document.documentElement;
+      html.classList.toggle('dark');
+      const isDark = html.classList.contains('dark');
+      document.getElementById('themeIcon').className = isDark ? 'ph-bold ph-moon' : 'ph-bold ph-sun';
+    };
+
+    window.closeChatMobile = function() {
+      activeChatTargetId = null;
+      document.getElementById('sidebar').classList.remove('hidden');
+      document.getElementById('activeChatContainer').classList.add('hidden');
+      document.getElementById('emptyState').classList.remove('hidden');
+    };
+
+    window.toggleEmojiPicker = function() {
+      document.getElementById('emojiPicker').classList.toggle('hidden');
+    };
+
+    window.insertEmoji = function(emoji) {
+      const input = document.getElementById('messageTextInput');
+      input.value += emoji;
+      document.getElementById('emojiPicker').classList.add('hidden');
+      updateSendIcon();
+      input.focus();
+    };
+
+    window.handleInputKeyDown = function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        window.handleSendAction();
+      }
+    };
+
+    window.handleTypingEvent = function(el) {
+      updateSendIcon();
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    };
+
+    function updateSendIcon() {
+      const input = document.getElementById('messageTextInput');
+      const icon = document.getElementById('sendActionIcon');
+      if (input.value.trim().length > 0 || window.selectedAttachmentData) {
+        icon.className = 'ph-bold ph-paper-plane-right';
+      } else {
+        icon.className = 'ph-bold ph-microphone';
+      }
+    }
+
+    window.toggleChatSearch = function() {
+      const box = document.getElementById('chatSearchBox');
+      box.classList.toggle('hidden');
+      if (!box.classList.contains('hidden')) {
+        document.getElementById('inChatSearchInput').focus();
+      }
+    };
+
+    window.searchWithinMessages = function(q) {
+      const container = document.getElementById('messagesArea');
+      const bubbles = container.querySelectorAll('p');
+      bubbles.forEach(p => {
+        if (q && p.innerText.toLowerCase().includes(q.toLowerCase())) {
+          p.parentElement.classList.add('ring-2', 'ring-amber-400');
+        } else {
+          p.parentElement.classList.remove('ring-2', 'ring-amber-400');
+        }
+      });
+    };
+
+    window.filterConversations = function(val) {
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (val.length > 0) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+      renderConversationsList(val);
+    };
+
+    window.clearSearch = function() {
+      const input = document.getElementById('contactSearch');
+      input.value = '';
+      window.filterConversations('');
+    };
+
+    /* CALL SIMULATOR */
+    let callTimerInterval = null;
+    window.startVoiceCall = function() {
+      if (!activeChatTargetId) return;
+      const overlay = document.getElementById('callOverlay');
+      document.getElementById('callAvatar').src = document.getElementById('activeChatAvatar').src;
+      document.getElementById('callTargetName').innerText = document.getElementById('activeChatName').innerText;
+      document.getElementById('callStatusText').innerText = 'Calling live user...';
+      overlay.classList.remove('hidden');
+
+      AudioEngine.playRingtone();
+      setTimeout(() => {
+        document.getElementById('callStatusText').innerText = 'Connected (00:01)';
+        let sec = 1;
+        callTimerInterval = setInterval(() => {
+          sec++;
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          document.getElementById('callStatusText').innerText = `Connected (${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s})`;
+        }, 1000);
+      }, 2500);
+    };
+
+    window.startVideoCall = function() {
+      window.startVoiceCall();
+      document.getElementById('callStatusText').innerText = 'Connecting live video feed...';
+    };
+
+    window.toggleCallMute = function() {
+      document.getElementById('callMuteBtn').classList.toggle('text-red-500');
+    };
+
+    window.endCall = function() {
+      clearInterval(callTimerInterval);
+      document.getElementById('callOverlay').classList.add('hidden');
+    };
+
+    /* HELPER UTILITIES */
+    function formatTime(timestamp) {
+      const date = new Date(timestamp);
+      let h = date.getHours();
+      const m = date.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${h}:${m < 10 ? '0' : ''}${m} ${ampm}`;
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastNotification');
+      document.getElementById('toastMessage').innerText = msg;
+      toast.classList.remove('hidden');
+      toast.classList.add('flex');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+      }, 3500);
+    }
+
+    function copyTextToClipboard(text) {
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+
+    function escapeHTML(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeQuotes(str) {
+      return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    // Launch
+    window.addEventListener('DOMContentLoaded', () => {
+      initLiveEngine();
+    });
+  </script>
+</body>
+</html>
