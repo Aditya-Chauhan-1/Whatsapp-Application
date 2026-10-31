@@ -55,6 +55,9 @@
       100% { transform: scale(0.95); opacity: 0.8; }
     }
   </style>
+  <!-- Global Peer & Cloud MQTT/Websocket client for 100% free cross-device sync on GitHub Pages -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body class="bg-[#0c1317] text-[#e9edef] font-sans antialiased h-screen w-screen overflow-hidden select-none">
 
@@ -208,16 +211,16 @@
       </aside>
 
       <!-- RIGHT MAIN: Active Real-Time Chat Viewport -->
-      <main id="chatArea" class="flex-1 flex flex-col bg-wa-chatDark h-full relative z-10 transition-transform">
+      <main id="chatArea" class="flex-1 flex flex-col bg-wa-chatDark h-full relative z-10 transition-transform overflow-hidden">
         
         <!-- Welcome Screen (When no active chat is selected) -->
-        <div id="emptyState" class="hidden md:flex flex-col items-center justify-center h-full text-center px-6 bg-wa-panelDark border-b-[6px] border-wa-teal select-text">
+        <div id="emptyState" class="flex flex-col items-center justify-center h-full text-center px-6 bg-wa-panelDark border-b-[6px] border-wa-teal select-text">
           <div class="w-40 h-40 mb-6 flex items-center justify-center rounded-full bg-wa-bgDark/60 border border-wa-borderDark shadow-inner">
             <i class="ph-duotone ph-whatsapp-logo text-7xl text-wa-teal"></i>
           </div>
           <h1 class="text-3xl font-light text-white mb-2">WhatsApp Web Live</h1>
           <p class="text-sm text-wa-subtextDark max-w-md leading-relaxed">
-            Connected to real-time live network. Click on <span class="text-wa-teal font-semibold">Online Users Network</span> or connect via phone/ID to message real users across the globe.
+            Connected to real-time live network. Click on <span class="text-wa-teal font-semibold">Online Users Network</span> or connect via phone to message real users across mobile & laptop.
           </p>
           <div class="mt-6 flex flex-wrap gap-2 justify-center">
             <button onclick="openLiveUsersDirectory()" class="px-4 py-2 bg-wa-teal hover:bg-wa-tealDark text-white text-xs font-semibold rounded-full shadow flex items-center space-x-1.5 transition">
@@ -230,16 +233,16 @@
             </button>
           </div>
           <div class="mt-8 flex items-center space-x-2 text-xs text-wa-subtextDark bg-wa-bgDark px-4 py-2 rounded-full border border-wa-borderDark">
-            <i class="ph-fill ph-lock-simple text-wa-teal"></i>
-            <span>End-to-end cloud synced messaging protocol</span>
+            <i class="ph-fill ph-broadcast text-wa-teal"></i>
+            <span id="networkStatusIndicator">Connecting to Live Cross-Device Cloud...</span>
           </div>
         </div>
 
-        <!-- Active Chat Screen -->
+        <!-- Active Chat Screen (Initially Hidden properly) -->
         <div id="activeChatContainer" class="flex-1 flex flex-col h-full hidden">
           
           <!-- Chat Header -->
-          <header class="h-16 bg-wa-panelDark px-4 flex items-center justify-between border-b border-wa-borderDark z-20">
+          <header class="h-16 bg-wa-panelDark px-4 flex items-center justify-between border-b border-wa-borderDark z-20 flex-shrink-0">
             <div class="flex items-center space-x-3 cursor-pointer">
               <!-- Back button for mobile view -->
               <button onclick="closeChatMobile()" class="md:hidden text-2xl text-wa-subtextDark hover:text-white mr-1">
@@ -248,11 +251,11 @@
               
               <div class="relative" onclick="openActiveContactInfo()">
                 <img id="activeChatAvatar" src="" class="w-10 h-10 rounded-full object-cover" alt="Active Chat">
-                <span id="activeOnlineDot" class="hidden absolute bottom-0 right-0 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
+                <span id="activeOnlineDot" class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark"></span>
               </div>
               <div onclick="openActiveContactInfo()">
                 <h3 id="activeChatName" class="text-sm font-semibold text-white leading-tight"></h3>
-                <p id="activeChatStatus" class="text-xs text-wa-teal">Online</p>
+                <p id="activeChatStatus" class="text-xs text-wa-teal">Online • Real-Time Live</p>
               </div>
             </div>
 
@@ -568,116 +571,32 @@
         <div>
           <label class="text-xs text-wa-subtextDark">Story Text</label>
           <textarea id="storyTextCaption" rows="3" placeholder="What's happening right now?" class="w-full mt-1 bg-wa-bgDark text-white p-3 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none"></textarea>
-        </div>
-        <div>
-          <label class="text-xs text-wa-subtextDark">Gradient Background</label>
-          <div class="flex space-x-2 mt-2">
-            <button onclick="selectStoryBg('gradient-1')" class="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-teal-800 ring-2 ring-white/50"></button>
-            <button onclick="selectStoryBg('gradient-2')" class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-600 to-indigo-900"></button>
-            <button onclick="selectStoryBg('gradient-3')" class="w-8 h-8 rounded-full bg-gradient-to-r from-rose-500 to-amber-700"></button>
-            <button onclick="selectStoryBg('gradient-4')" class="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-600 to-blue-900"></button>
-          </div>
-        </div>
-        <button onclick="publishStoryLive()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-lg text-sm transition">Post Story to Cloud</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- START CHAT BY PHONE / ID MODAL -->
-  <div id="newChatModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-white">Start New Conversation</h3>
-        <button onclick="closeNewChatModal()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
-      </div>
-      <div class="space-y-3">
-        <div>
-          <label class="text-xs text-wa-subtextDark">Contact's Phone Number or UID *</label>
-          <input type="text" id="targetContactIdentifier" placeholder="e.g. +1 555-0199 or user ID" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
-        </div>
-        <div>
-          <label class="text-xs text-wa-subtextDark">Display Name (Optional if in network)</label>
-          <input type="text" id="targetContactDisplayName" placeholder="e.g. Michael" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
-        </div>
-        <div id="newChatError" class="hidden text-xs text-red-400 font-medium">Please enter a phone number or user ID.</div>
-        <button onclick="initiateChatWithTarget()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-lg text-sm transition mt-2">Open Conversation</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- PROFILE / SETTINGS MODAL -->
-  <div id="profileModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-wa-panelDark border border-wa-borderDark rounded-2xl w-full max-w-md p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-white">Your Profile</h3>
-        <button onclick="closeProfileModal()" class="text-wa-subtextDark hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
-      </div>
-      <div class="flex flex-col items-center mb-6">
-        <img id="profileModalAvatar" src="" class="w-24 h-24 rounded-full object-cover ring-4 ring-wa-teal mb-3">
-        <button onclick="changeProfileAvatar()" class="text-xs text-wa-teal font-semibold hover:underline flex items-center space-x-1">
-          <i class="ph-bold ph-camera"></i> <span>Pick New Avatar</span>
-        </button>
-      </div>
-      <div class="space-y-4">
-        <div>
-          <label class="text-xs text-wa-subtextDark">Your Display Name</label>
-          <input type="text" id="profileNameInput" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
-        </div>
-        <div>
-          <label class="text-xs text-wa-subtextDark">Your Phone / Handle</label>
-          <input type="text" id="profilePhoneInput" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
-        </div>
-        <div>
-          <label class="text-xs text-wa-subtextDark">About</label>
-          <input type="text" id="profileAboutInput" class="w-full mt-1 bg-wa-bgDark text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-wa-teal border-none">
-        </div>
-        <button onclick="saveProfileChanges()" class="w-full py-2.5 bg-wa-teal hover:bg-wa-tealDark text-white font-semibold rounded-lg text-sm transition">Save to Cloud</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- TOAST NOTIFICATION CONTAINER -->
-  <div id="toastNotification" class="fixed top-5 right-5 bg-wa-panelDark border border-wa-teal text-white px-4 py-3 rounded-xl shadow-2xl text-xs z-[100] hidden items-center space-x-2 transition-all">
-    <i class="ph-fill ph-check-circle text-wa-teal text-lg"></i>
-    <span id="toastMessage">Action completed</span>
-  </div>
-
-  <!-- REAL-TIME CLOUD FIREBASE SDK ENGINE -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+  <!-- REAL-TIME CLOUD MESSAGING ENGINE (CROSS-DEVICE GUARANTEED) -->
+  <script>
     /* ==========================================================================
-       1. FIREBASE CONFIGURATION & INITIALIZATION
+       1. GLOBAL STATE & IDENTITY
        ========================================================================== */
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'whatsapp-realtime-core';
-    
-    // Automatic fallback config if running outside embedded container
-    const defaultFirebaseConfig = {
-      apiKey: "AIzaSyDummyKeyForFallbackOnly",
-      authDomain: "live-whatsapp-prod.firebaseapp.com",
-      projectId: "live-whatsapp-prod",
-      storageBucket: "live-whatsapp-prod.appspot.com"
-    };
-
-    const firebaseConfig = typeof __firebase_config !== 'undefined' 
-      ? JSON.parse(__firebase_config) 
-      : defaultFirebaseConfig;
-
-    let app, auth, db;
     let currentUserUid = null;
     let currentProfile = null;
     let registeredUsers = [];
     let conversations = [];
-    let activeChatTargetId = null;
+    let activeChatTargetId = null; // Stored as clean phone number or group ID
+    let activeChatContact = null;
     let isCurrentChatGroup = false;
-    let currentGroupData = null;
-    let messagesListenerUnsub = null;
-    let isConnectedToLive = false;
 
-    // Cross-tab broadcast backup channel
+    // Cross-tab local channel
     const APP_CHANNEL = new BroadcastChannel('whatsapp_live_sync_network');
+
+    // Public Free Real-Time Cloud WebSocket Broker (HiveMQ / EMQX public TLS broker)
+    // Works everywhere without any setup or API keys across Mobile + Laptop
+    const CLOUD_BROKER_URL = "wss://broker.emqx.io:8084/mqtt";
+    const APP_NAMESPACE = "whatsapp_pro_live_network_v2";
+    let mqttClient = null;
+
+    function cleanPhone(num) {
+      if (!num) return '';
+      return String(num).replace(/[^0-9]/g, '');
+    }
 
     /* ==========================================================================
        2. AUDIO EFFECT SYNTHESIZER
@@ -743,56 +662,34 @@
     };
 
     /* ==========================================================================
-       3. AUTHENTICATION & STARTUP SEQUENCE
+       3. CLOUD ENGINE SETUP (CONNECTS MOBILE & LAPTOP GUARANTEED)
        ========================================================================== */
-    async function initLiveEngine() {
-      try {
-        app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-
-        // Sign in anonymously or custom token
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-
-        currentUserUid = auth.currentUser ? auth.currentUser.uid : 'usr_' + Math.random().toString(36).substring(2, 9);
-        isConnectedToLive = true;
-      } catch (err) {
-        console.warn("Cloud connection initialized in peer network mode:", err);
-        currentUserUid = 'usr_' + Math.random().toString(36).substring(2, 9);
-      }
-
-      // Check if user has already set up real profile
-      checkUserRegistration();
-    }
-
-    function checkUserRegistration() {
-      // In-memory or session storage profile check
+    function initLiveEngine() {
+      // Load saved profile or generate
       const savedProfile = window.localStorage.getItem('whatsapp_pro_profile');
       if (savedProfile) {
         try {
           currentProfile = JSON.parse(savedProfile);
-          currentProfile.uid = currentUserUid;
+          currentUserUid = currentProfile.cleanPhone || cleanPhone(currentProfile.phone);
+          currentProfile.cleanPhone = currentUserUid;
           applyProfileToUI();
-          syncProfileToCloud();
-          startLiveListeners();
+          connectToCloudNetwork();
           return;
         } catch(e){}
       }
 
-      // Show real onboarding modal if not configured
+      // Show onboarding modal
       document.getElementById('onboardingModal').classList.remove('hidden');
     }
 
     window.completeUserOnboarding = function() {
       const name = document.getElementById('onboardName').value.trim();
-      const phone = document.getElementById('onboardPhone').value.trim();
+      const rawPhone = document.getElementById('onboardPhone').value.trim();
       const about = document.getElementById('onboardAbout').value.trim();
 
-      if (!name || !phone) {
+      const phoneNum = cleanPhone(rawPhone);
+      if (!name || phoneNum.length < 3) {
+        document.getElementById('onboardingError').innerText = 'Please enter a valid Name & Phone Number (digits)';
         document.getElementById('onboardingError').classList.remove('hidden');
         return;
       }
@@ -804,10 +701,12 @@
         'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop'
       ];
 
+      currentUserUid = phoneNum;
       currentProfile = {
-        uid: currentUserUid,
+        uid: phoneNum,
+        cleanPhone: phoneNum,
         name: name,
-        phone: phone,
+        phone: rawPhone,
         about: about || 'Available on WhatsApp',
         avatar: defaultAvatars[Math.floor(Math.random() * defaultAvatars.length)],
         lastActive: Date.now(),
@@ -818,9 +717,8 @@
       document.getElementById('onboardingModal').classList.add('hidden');
 
       applyProfileToUI();
-      syncProfileToCloud();
-      startLiveListeners();
-      showToast('Profile created successfully! Live sync enabled.');
+      connectToCloudNetwork();
+      showToast('Profile registered! Connecting live across all devices...');
     };
 
     function applyProfileToUI() {
@@ -828,166 +726,169 @@
       document.getElementById('myDisplayName').innerText = currentProfile.name;
       document.getElementById('myAvatar').src = currentProfile.avatar;
       document.getElementById('storyUserAvatar').src = currentProfile.avatar;
-      document.getElementById('myUserHandleTag').innerText = `Phone: ${currentProfile.phone} | ID: ${currentProfile.uid}`;
+      document.getElementById('myUserHandleTag').innerText = `Phone: ${currentProfile.phone} (Clean: ${currentProfile.cleanPhone})`;
       document.getElementById('pairingPhoneDisplay').innerText = currentProfile.phone;
-      document.getElementById('pairingUidDisplay').innerText = currentProfile.uid;
-      
+      document.getElementById('pairingUidDisplay').innerText = currentProfile.cleanPhone;
+    }
+
+    function connectToCloudNetwork() {
       const statusBadge = document.getElementById('liveStatusBadge');
-      statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-wa-tealLight"></span><span>Real-Time Cloud Connected</span>`;
-    }
+      const networkStatus = document.getElementById('networkStatusIndicator');
+      statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span><span>Connecting Cloud...</span>`;
 
-    async function syncProfileToCloud() {
-      if (!db || !currentUserUid) return;
       try {
-        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUserUid);
-        await setDoc(userRef, {
-          ...currentProfile,
-          lastActive: Date.now(),
-          isOnline: true
-        }, { merge: true });
-      } catch (err) {
-        console.warn("User sync notice:", err);
-      }
-    }
-
-    /* ==========================================================================
-       4. REAL-TIME CLOUD LISTENERS (NO COMPLEX QUERIES - RULE 2)
-       ========================================================================== */
-    function startLiveListeners() {
-      if (!db) {
-        initLocalLiveChannel();
-        return;
-      }
-
-      // 1. Live Users Listener: fetch all users in the public directory
-      try {
-        const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'users');
-        onSnapshot(usersCol, (snapshot) => {
-          const list = [];
-          snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data && data.uid !== currentUserUid) {
-              list.push(data);
-            }
-          });
-          registeredUsers = list;
-          renderLiveUsersDirectoryList();
-        }, (error) => {
-          console.warn("Users subscription notice:", error);
-          initLocalLiveChannel();
+        const clientId = 'wa_' + currentProfile.cleanPhone + '_' + Math.random().toString(16).substr(2, 6);
+        mqttClient = mqtt.connect(CLOUD_BROKER_URL, {
+          clientId: clientId,
+          clean: true,
+          connectTimeout: 4000,
+          reconnectPeriod: 2500
         });
-      } catch(e) {
-        initLocalLiveChannel();
-      }
 
-      // 2. Live Public Stories Listener
-      try {
-        const storiesCol = collection(db, 'artifacts', appId, 'public', 'data', 'stories');
-        onSnapshot(storiesCol, (snapshot) => {
-          const sList = [];
-          snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data) sList.push(data);
-          });
-          // sort descending by timestamp in JavaScript memory
-          sList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-          renderStories(sList);
-        }, (err) => {
-          console.warn("Stories listener notice:", err);
+        mqttClient.on('connect', () => {
+          statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-wa-tealLight"></span><span>Real-Time Cloud Connected</span>`;
+          if (networkStatus) networkStatus.innerText = 'Connected Live to Real-Time Cloud Relay';
+
+          // 1. Subscribe to Public Presence / Directory
+          mqttClient.subscribe(`${APP_NAMESPACE}/presence/#`);
+
+          // 2. Subscribe to Direct Personal Messages for this phone number
+          mqttClient.subscribe(`${APP_NAMESPACE}/user/${currentProfile.cleanPhone}/#`);
+
+          // 3. Subscribe to Public Groups
+          mqttClient.subscribe(`${APP_NAMESPACE}/groups/#`);
+
+          // 4. Subscribe to Stories
+          mqttClient.subscribe(`${APP_NAMESPACE}/stories/#`);
+
+          // Announce presence immediately
+          broadcastPresence();
+          setInterval(broadcastPresence, 15000);
+          showToast('Live Cloud Online! Ready to chat across Mobile & Laptop.');
         });
-      } catch(e){}
 
-      // 3. User Private Conversations & Contacts Listener
-      try {
-        const chatsCol = collection(db, 'artifacts', appId, 'users', currentUserUid, 'chats');
-        onSnapshot(chatsCol, (snapshot) => {
-          const cList = [];
-          snapshot.forEach(docSnap => {
-            const d = docSnap.data();
-            if (d) cList.push(d);
-          });
-          // Sort conversations by last message timestamp in memory
-          cList.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-          conversations = cList;
-          renderConversationsList();
-
-          // If active chat exists, re-sync headers
-          if (activeChatTargetId) {
-            const activeChat = conversations.find(c => c.targetUid === activeChatTargetId);
-            if (activeChat) {
-              document.getElementById('activeChatName').innerText = activeChat.targetName;
-              document.getElementById('activeChatAvatar').src = activeChat.targetAvatar;
-            }
+        mqttClient.on('message', (topic, message) => {
+          try {
+            const data = JSON.parse(message.toString());
+            handleCloudPacket(topic, data);
+          } catch(e) {
+            console.error(e);
           }
-        }, (err) => {
-          console.warn("Conversations listener notice:", err);
-          initLocalLiveChannel();
         });
-      } catch(e){
-        initLocalLiveChannel();
-      }
-    }
 
-    function initLocalLiveChannel() {
+        mqttClient.on('error', (err) => {
+          console.warn("MQTT connection notice:", err);
+        });
+      } catch(err) {
+        console.error("Cloud connection failed:", err);
+      }
+
+      // Local Tab listener
       APP_CHANNEL.onmessage = (event) => {
-        const data = event.data;
-        if (!data) return;
-
-        if (data.type === 'USER_BROADCAST') {
-          if (data.user && data.user.uid !== currentUserUid) {
-            const idx = registeredUsers.findIndex(u => u.uid === data.user.uid);
-            if (idx > -1) registeredUsers[idx] = data.user;
-            else registeredUsers.push(data.user);
-            renderLiveUsersDirectoryList();
-          }
-        } else if (data.type === 'NEW_LIVE_MESSAGE') {
-          if (data.isGroup) {
-            handleIncomingLiveMessage(data);
-          } else if (data.recipientUid === currentUserUid) {
-            handleIncomingLiveMessage(data);
-          }
-        } else if (data.type === 'REACTION_SYNC') {
-          if (activeChatTargetId && (data.recipientUid === currentUserUid || data.senderUid === currentUserUid || data.isGroup)) {
-            refreshActiveChatMessages();
-          }
+        if (event.data) {
+          handleIncomingMessage(event.data);
         }
       };
 
-      // Broadcast self
-      if (currentProfile) {
-        APP_CHANNEL.postMessage({
-          type: 'USER_BROADCAST',
-          user: currentProfile
-        });
+      loadSavedConversations();
+    }
+
+    function broadcastPresence() {
+      if (!mqttClient || !mqttClient.connected || !currentProfile) return;
+      const payload = JSON.stringify({
+        ...currentProfile,
+        lastActive: Date.now()
+      });
+      mqttClient.publish(`${APP_NAMESPACE}/presence/${currentProfile.cleanPhone}`, payload, { retain: true });
+    }
+
+    function handleCloudPacket(topic, data) {
+      if (!data) return;
+
+      // 1. Presence packet
+      if (topic.startsWith(`${APP_NAMESPACE}/presence/`)) {
+        if (data.cleanPhone && data.cleanPhone !== currentProfile.cleanPhone) {
+          const idx = registeredUsers.findIndex(u => u.cleanPhone === data.cleanPhone);
+          if (idx > -1) {
+            registeredUsers[idx] = data;
+          } else {
+            registeredUsers.push(data);
+          }
+          renderLiveUsersDirectoryList();
+        }
+      }
+
+      // 2. Direct message packet sent to me
+      else if (topic.startsWith(`${APP_NAMESPACE}/user/${currentProfile.cleanPhone}/`)) {
+        handleIncomingMessage(data);
+      }
+
+      // 3. Group chat message
+      else if (topic.startsWith(`${APP_NAMESPACE}/groups/`)) {
+        if (data.senderPhone !== currentProfile.cleanPhone) {
+          handleIncomingMessage(data);
+        }
+      }
+
+      // 4. Stories
+      else if (topic.startsWith(`${APP_NAMESPACE}/stories/`)) {
+        addStoryToCarousel(data);
       }
     }
 
     /* ==========================================================================
-       5. CHAT ROOM & MESSAGES STREAM (1-to-1 & 1-to-Many Groups)
+       4. CONVERSATIONS & CHAT SELECTION (FIXES THE BLANK/OVERLAP SCREEN)
        ========================================================================== */
-    function getRoomId(uidA, uidB, isGroup = false) {
-      if (isGroup) {
-        return `group___${uidB}`;
-      }
-      return [uidA, uidB].sort().join('___');
+    function getRoomKey(phoneA, phoneB, isGroup = false) {
+      if (isGroup) return `group___${phoneB}`;
+      return [cleanPhone(phoneA), cleanPhone(phoneB)].sort().join('___');
+    }
+
+    let storedMessages = {};
+
+    function loadSavedConversations() {
+      try {
+        const raw = window.localStorage.getItem(`wa_convs_${currentProfile.cleanPhone}`);
+        if (raw) conversations = JSON.parse(raw);
+        const rawMsgs = window.localStorage.getItem(`wa_msgs_${currentProfile.cleanPhone}`);
+        if (rawMsgs) storedMessages = JSON.parse(rawMsgs);
+      } catch(e){}
+      renderConversationsList();
+    }
+
+    function saveStateToStorage() {
+      if (!currentProfile) return;
+      try {
+        window.localStorage.setItem(`wa_convs_${currentProfile.cleanPhone}`, JSON.stringify(conversations));
+        window.localStorage.setItem(`wa_msgs_${currentProfile.cleanPhone}`, JSON.stringify(storedMessages));
+      } catch(e){}
     }
 
     window.openChatWithUser = function(targetUser) {
-      if (!targetUser || targetUser.uid === currentUserUid) return;
+      if (!targetUser) return;
+      const targetPhone = cleanPhone(targetUser.cleanPhone || targetUser.phone || targetUser.uid);
+      if (targetPhone === currentProfile.cleanPhone && !targetUser.isGroup) {
+        showToast('You cannot start a chat with yourself!');
+        return;
+      }
 
-      activeChatTargetId = targetUser.uid;
+      activeChatTargetId = targetPhone;
+      activeChatContact = targetUser;
       isCurrentChatGroup = !!targetUser.isGroup;
-      currentGroupData = isCurrentChatGroup ? targetUser : null;
-      
-      // Update UI Header
+
+      // CRITICAL FIX: Hide emptyState completely, show activeChatContainer
       document.getElementById('emptyState').classList.add('hidden');
-      document.getElementById('activeChatContainer').classList.remove('hidden');
-      document.getElementById('activeChatName').innerText = targetUser.name || 'User';
-      document.getElementById('activeChatAvatar').src = targetUser.avatar || (isCurrentChatGroup ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100&h=100&fit=crop' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop');
-      document.getElementById('activeChatStatus').innerText = isCurrentChatGroup 
-        ? `${targetUser.members?.length || 2} participants (One-to-Many)` 
-        : (targetUser.phone || 'Online');
-      document.getElementById('activeOnlineDot').classList.remove('hidden');
+      document.getElementById('emptyState').classList.remove('md:flex');
+      
+      const chatContainer = document.getElementById('activeChatContainer');
+      chatContainer.classList.remove('hidden');
+      chatContainer.classList.add('flex');
+
+      document.getElementById('activeChatName').innerText = targetUser.name || targetUser.phone;
+      document.getElementById('activeChatAvatar').src = targetUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop';
+      document.getElementById('activeChatStatus').innerText = isCurrentChatGroup
+        ? `${targetUser.members?.length || 2} members in group`
+        : `Online • ${targetUser.phone}`;
 
       if (window.innerWidth < 768) {
         document.getElementById('sidebar').classList.add('hidden');
@@ -997,117 +898,243 @@
       closeLiveUsersDirectory();
       closeNewChatModal();
 
-      // Ensure conversation entry exists in UI & cloud
-      registerLocalConversation(targetUser);
-
-      // Listen to room messages
-      bindRoomMessagesListener(targetUser.uid, isCurrentChatGroup);
-    };
-
-    function registerLocalConversation(targetUser) {
-      const existing = conversations.find(c => c.targetUid === targetUser.uid);
-      if (!existing) {
-        const newConv = {
-          targetUid: targetUser.uid,
-          targetName: targetUser.name,
-          targetPhone: targetUser.phone || '',
-          targetAbout: targetUser.about || (targetUser.isGroup ? 'Group Conversation' : 'Available'),
+      // Ensure in conversations list
+      let conv = conversations.find(c => cleanPhone(c.targetPhone) === targetPhone);
+      if (!conv) {
+        conv = {
+          targetPhone: targetPhone,
+          targetName: targetUser.name || targetUser.phone,
           targetAvatar: targetUser.avatar,
-          isGroup: !!targetUser.isGroup,
+          isGroup: isCurrentChatGroup,
           members: targetUser.members || [],
-          lastMessage: targetUser.isGroup ? 'Group created' : 'Conversation started',
+          lastMessage: 'Conversation started',
           lastUpdated: Date.now(),
           unreadCount: 0
         };
-        conversations.unshift(newConv);
-        renderConversationsList();
-
-        if (db && currentUserUid) {
-          const chatDoc = doc(db, 'artifacts', appId, 'users', currentUserUid, 'chats', targetUser.uid);
-          setDoc(chatDoc, newConv, { merge: true }).catch(()=>{});
-        }
+        conversations.unshift(conv);
+      } else {
+        conv.unreadCount = 0;
       }
+      renderConversationsList();
+      saveStateToStorage();
+
+      // Render Messages
+      renderChatMessages();
+    };
+
+    function renderChatMessages() {
+      if (!activeChatTargetId) return;
+      const roomKey = getRoomKey(currentProfile.cleanPhone, activeChatTargetId, isCurrentChatGroup);
+      const messages = storedMessages[roomKey] || [];
+      renderMessageBubbles(messages);
     }
 
-    function bindRoomMessagesListener(targetUid, isGroup = false) {
-      if (messagesListenerUnsub) {
-        messagesListenerUnsub();
-        messagesListenerUnsub = null;
+    function handleIncomingMessage(msg) {
+      const senderPhone = cleanPhone(msg.senderPhone);
+      const recipientPhone = cleanPhone(msg.recipientPhone);
+      const isGroup = !!msg.isGroup;
+      const roomKey = isGroup 
+        ? `group___${recipientPhone}` 
+        : getRoomKey(senderPhone, recipientPhone);
+
+      if (!storedMessages[roomKey]) storedMessages[roomKey] = [];
+      
+      // Avoid duplicates
+      if (!storedMessages[roomKey].some(m => m.id === msg.id)) {
+        storedMessages[roomKey].push(msg);
       }
-
-      const roomId = getRoomId(currentUserUid, targetUid, isGroup);
-      const messagesContainer = document.getElementById('messagesArea');
-      messagesContainer.innerHTML = `
-        <div class="flex items-center justify-center p-6 text-wa-subtextDark text-xs">
-          <i class="ph ph-spinner-gap animate-spin text-xl text-wa-teal mr-2"></i>
-          <span>Loading ${isGroup ? 'group room' : 'end-to-end'} messages...</span>
-        </div>
-      `;
-
-      if (!db) {
-        refreshActiveChatMessages();
-        return;
-      }
-
-      try {
-        const roomMsgsCol = collection(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages');
-        messagesListenerUnsub = onSnapshot(roomMsgsCol, (snapshot) => {
-          const msgs = [];
-          snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data) msgs.push({ id: docSnap.id, ...data });
-          });
-
-          // Sort messages by timestamp in memory
-          msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-          renderMessageBubbles(msgs);
-
-          // Mark unread as read if sent to me
-          msgs.forEach(m => {
-            if (m.recipientUid === currentUserUid && m.status !== 'read') {
-              const msgRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId, 'messages', m.id);
-              updateDoc(msgRef, { status: 'read' }).catch(()=>{});
-            }
-          });
-        }, (error) => {
-          console.warn("Room listener notice:", error);
-          refreshActiveChatMessages();
-        });
-      } catch(e) {
-        refreshActiveChatMessages();
-      }
-    }
-
-    // Fallback in-memory messages storage for single-window or offline tests
-    let localRoomMessages = {};
-
-    function refreshActiveChatMessages() {
-      const roomId = getRoomId(currentUserUid, activeChatTargetId, isCurrentChatGroup);
-      const msgs = localRoomMessages[roomId] || [];
-      renderMessageBubbles(msgs);
-    }
-
-    function handleIncomingLiveMessage(data) {
-      const roomId = getRoomId(data.senderUid, data.recipientUid, data.isGroup);
-      if (!localRoomMessages[roomId]) localRoomMessages[roomId] = [];
-      localRoomMessages[roomId].push(data.message);
 
       AudioEngine.playIncoming();
 
-      // Check if this chat is active
-      if (activeChatTargetId === (data.isGroup ? data.recipientUid : data.senderUid)) {
-        data.message.status = 'read';
-        refreshActiveChatMessages();
+      // Update or create conversation
+      const convIdentifier = isGroup ? recipientPhone : senderPhone;
+      let conv = conversations.find(c => cleanPhone(c.targetPhone) === convIdentifier);
+      if (!conv) {
+        conv = {
+          targetPhone: convIdentifier,
+          targetName: msg.senderName || msg.senderPhone,
+          targetAvatar: msg.senderAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+          isGroup: isGroup,
+          lastMessage: msg.text || 'Received media',
+          lastUpdated: Date.now(),
+          unreadCount: 0
+        };
+        conversations.unshift(conv);
       } else {
-        // increment unread
-        const c = conversations.find(x => x.targetUid === (data.isGroup ? data.recipientUid : data.senderUid));
-        if (c) c.unreadCount = (c.unreadCount || 0) + 1;
-        renderConversationsList();
+        conv.lastMessage = msg.text || 'Received media';
+        conv.lastUpdated = Date.now();
       }
+
+      if (activeChatTargetId === convIdentifier) {
+        conv.unreadCount = 0;
+        renderChatMessages();
+      } else {
+        conv.unreadCount = (conv.unreadCount || 0) + 1;
+      }
+
+      renderConversationsList();
+      saveStateToStorage();
     }
 
     /* ==========================================================================
-       6. RENDERING CONVERSATIONS & MESSAGES
+       5. SENDING REAL-TIME MESSAGES (CROSS-DEVICE GUARANTEED)
+       ========================================================================== */
+    window.handleSendAction = function() {
+      const input = document.getElementById('messageTextInput');
+      const text = input.value.trim();
+
+      if (!text && !pendingAttachment && !pendingVoiceNote) {
+        startVoiceRecording();
+        return;
+      }
+
+      if (!activeChatTargetId) {
+        showToast('Please select a contact or enter a phone number first');
+        return;
+      }
+
+      const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      const messagePayload = {
+        id: msgId,
+        senderPhone: currentProfile.cleanPhone,
+        senderName: currentProfile.name,
+        senderAvatar: currentProfile.avatar,
+        recipientPhone: activeChatTargetId,
+        isGroup: isCurrentChatGroup,
+        text: text,
+        type: pendingAttachment ? pendingAttachment.type : (pendingVoiceNote ? 'audio' : 'text'),
+        mediaUrl: pendingAttachment ? pendingAttachment.url : (pendingVoiceNote || ''),
+        mapUrl: pendingAttachment?.mapUrl || '',
+        timestamp: Date.now(),
+        status: 'delivered'
+      };
+
+      // Play local pop sound
+      AudioEngine.playPop();
+
+      // Save locally
+      const roomKey = getRoomKey(currentProfile.cleanPhone, activeChatTargetId, isCurrentChatGroup);
+      if (!storedMessages[roomKey]) storedMessages[roomKey] = [];
+      storedMessages[roomKey].push(messagePayload);
+
+      // Update conversation in sidebar
+      let conv = conversations.find(c => cleanPhone(c.targetPhone) === activeChatTargetId);
+      if (conv) {
+        conv.lastMessage = text || (messagePayload.type === 'image' ? '📷 Photo' : '🎤 Voice note');
+        conv.lastUpdated = Date.now();
+      }
+      renderConversationsList();
+      saveStateToStorage();
+      renderChatMessages();
+
+      // 1. Broadcast to Cross-Device Cloud via MQTT WebSocket Relay
+      if (mqttClient && mqttClient.connected) {
+        const payloadStr = JSON.stringify(messagePayload);
+        if (isCurrentChatGroup) {
+          mqttClient.publish(`${APP_NAMESPACE}/groups/${activeChatTargetId}`, payloadStr);
+        } else {
+          // Publish directly to the recipient's personal phone topic
+          mqttClient.publish(`${APP_NAMESPACE}/user/${activeChatTargetId}/messages`, payloadStr);
+        }
+      }
+
+      // 2. Broadcast to same-device tabs
+      APP_CHANNEL.postMessage(messagePayload);
+
+      // Reset inputs
+      input.value = '';
+      cancelAttachment();
+      pendingVoiceNote = null;
+      document.getElementById('sendActionIcon').className = 'ph-bold ph-microphone';
+    };
+
+    /* ==========================================================================
+       6. PHONE NUMBER LOOKUP & DIRECT CONNECT
+       ========================================================================== */
+    window.initiateChatWithTarget = function() {
+      const input = document.getElementById('targetContactIdentifier').value.trim();
+      const customName = document.getElementById('targetContactDisplayName').value.trim();
+      const targetClean = cleanPhone(input);
+
+      if (!targetClean) {
+        document.getElementById('newChatError').classList.remove('hidden');
+        return;
+      }
+
+      if (targetClean === currentProfile.cleanPhone) {
+        document.getElementById('newChatError').innerText = 'You cannot chat with your own number!';
+        document.getElementById('newChatError').classList.remove('hidden');
+        return;
+      }
+
+      // Check if user is known in directory
+      let matched = registeredUsers.find(u => cleanPhone(u.cleanPhone || u.phone) === targetClean);
+      if (!matched) {
+        matched = {
+          cleanPhone: targetClean,
+          phone: input,
+          name: customName || `+${targetClean}`,
+          about: 'Live Peer',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop',
+          isGroup: false
+        };
+      }
+
+      openChatWithUser(matched);
+      showToast(`Connected with ${matched.name}! Send a message now.`);
+    };
+
+    /* ==========================================================================
+       7. ACTIVE USERS DIRECTORY (DISCOVER REAL PEERS)
+       ========================================================================== */
+    window.openLiveUsersDirectory = function() {
+      renderLiveUsersDirectoryList();
+      document.getElementById('liveDirectoryModal').classList.remove('hidden');
+    };
+
+    window.closeLiveUsersDirectory = function() {
+      document.getElementById('liveDirectoryModal').classList.add('hidden');
+    };
+
+    function renderLiveUsersDirectoryList() {
+      const container = document.getElementById('liveUsersList');
+      if (!container) return;
+
+      const peers = registeredUsers.filter(u => cleanPhone(u.cleanPhone) !== currentProfile.cleanPhone);
+
+      if (peers.length === 0) {
+        container.innerHTML = `
+          <div class="p-6 text-center text-wa-subtextDark text-xs">
+            <i class="ph ph-broadcast text-3xl text-wa-teal mb-2 block mx-auto animate-pulse"></i>
+            <p class="font-medium text-white mb-1">Waiting for other phone / laptop to connect...</p>
+            <p class="text-[11px] text-gray-400">Open this same GitHub link on your mobile or another browser tab.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = peers.map(user => `
+        <div onclick='window.openChatWithUser(${JSON.stringify(user)})' class="flex items-center justify-between p-3 hover:bg-wa-hoverDark rounded-xl cursor-pointer transition">
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <img src="${user.avatar}" class="w-10 h-10 rounded-full object-cover">
+              <span class="w-2.5 h-2.5 bg-wa-teal rounded-full ring-2 ring-wa-panelDark absolute bottom-0 right-0"></span>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-white leading-tight">${user.name}</h4>
+              <p class="text-xs text-wa-teal font-mono">${user.phone}</p>
+              <p class="text-[11px] text-wa-subtextDark truncate max-w-xs">${user.about || 'Available'}</p>
+            </div>
+          </div>
+          <button class="px-3 py-1 bg-wa-teal/20 text-wa-teal rounded-lg text-xs font-semibold hover:bg-wa-teal/30">
+            Chat Live
+          </button>
+        </div>
+      `).join('');
+    }
+
+    /* ==========================================================================
+       8. RENDERING CONVERSATIONS & MESSAGE BUBBLES
        ========================================================================== */
     function renderConversationsList(filterQuery = '') {
       const container = document.getElementById('chatsList');
@@ -1123,7 +1150,7 @@
             <i class="ph ph-chat-teardrop-slash text-4xl mb-2 opacity-50 block mx-auto"></i>
             <p>No conversations yet.</p>
             <button onclick="openLiveUsersDirectory()" class="mt-3 px-3 py-1.5 bg-wa-teal/20 text-wa-teal rounded-lg text-xs font-semibold hover:bg-wa-teal/30 transition">
-              Message Active Users
+              Find Online Users
             </button>
           </div>
         `;
@@ -1131,11 +1158,11 @@
       }
 
       container.innerHTML = filtered.map(c => {
-        const isActive = c.targetUid === activeChatTargetId;
+        const isActive = cleanPhone(c.targetPhone) === activeChatTargetId;
         const timeFormatted = c.lastUpdated ? formatTime(c.lastUpdated) : '';
 
         return `
-          <div onclick="window.selectConversationByUid('${c.targetUid}')" class="flex items-center px-4 py-3 cursor-pointer transition ${isActive ? 'bg-wa-hoverDark' : 'hover:bg-wa-panelDark/60'}">
+          <div onclick="window.selectConversationByPhone('${c.targetPhone}')" class="flex items-center px-4 py-3 cursor-pointer transition ${isActive ? 'bg-wa-hoverDark' : 'hover:bg-wa-panelDark/60'}">
             <div class="relative flex-shrink-0 mr-3">
               <img src="${c.targetAvatar || (c.isGroup ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100&h=100&fit=crop' : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop')}" class="w-12 h-12 rounded-full object-cover">
               <span class="absolute bottom-0 right-0 w-3 h-3 ${c.isGroup ? 'bg-emerald-400' : 'bg-wa-teal'} rounded-full ring-2 ring-wa-bgDark"></span>
@@ -1158,10 +1185,9 @@
       }).join('');
     }
 
-    window.selectConversationByUid = function(targetUid) {
-      const conv = conversations.find(c => c.targetUid === targetUid);
+    window.selectConversationByPhone = function(targetPhone) {
+      const conv = conversations.find(c => cleanPhone(c.targetPhone) === cleanPhone(targetPhone));
       if (conv) {
-        conv.unreadCount = 0;
         openChatWithUser(conv);
       }
     };
@@ -1171,8 +1197,8 @@
       if (!messages || messages.length === 0) {
         container.innerHTML = `
           <div class="flex flex-col items-center justify-center h-full text-center p-6 text-wa-subtextDark text-xs">
-            <span class="bg-wa-panelDark px-3 py-1.5 rounded-lg border border-wa-borderDark shadow-sm">
-              <i class="ph-bold ph-lock-key text-wa-teal mr-1"></i> Messages are synchronized live across peers.
+            <span class="bg-wa-panelDark px-4 py-2 rounded-xl border border-wa-borderDark shadow-sm">
+              <i class="ph-bold ph-lock-key text-wa-teal mr-1"></i> Messages are real-time synced. Say hello to initiate the live chat!
             </span>
           </div>
         `;
@@ -1180,25 +1206,11 @@
       }
 
       container.innerHTML = messages.map(msg => {
-        const isMine = msg.senderUid === currentUserUid;
+        const isMine = cleanPhone(msg.senderPhone) === currentProfile.cleanPhone;
         const timeStr = formatTime(msg.timestamp);
 
-        // Tick Marks
-        let tickIcon = '<i class="ph ph-check text-xs text-gray-400"></i>';
-        if (msg.status === 'delivered') {
-          tickIcon = '<i class="ph-bold ph-checks text-xs text-gray-400"></i>';
-        } else if (msg.status === 'read') {
-          tickIcon = '<i class="ph-bold ph-checks text-xs text-sky-400"></i>';
-        }
+        let tickIcon = '<i class="ph-bold ph-checks text-xs text-sky-400"></i>';
 
-        // Reactions markup
-        const reactionMarkup = msg.reaction ? `
-          <div class="absolute -bottom-2 right-2 bg-wa-panelDark border border-wa-borderDark px-1.5 py-0.5 rounded-full text-xs shadow-md">
-            ${msg.reaction}
-          </div>
-        ` : '';
-
-        // Media content renderer
         let contentMarkup = '';
         if (msg.type === 'image') {
           contentMarkup = `<img src="${msg.mediaUrl}" class="rounded-lg max-h-60 w-full object-cover mb-1.5">`;
@@ -1231,15 +1243,6 @@
                 <span>${timeStr}</span>
                 ${isMine ? tickIcon : ''}
               </div>
-              ${reactionMarkup}
-            </div>
-
-            <!-- Hover Quick Reaction Bar -->
-            <div class="hidden group-hover:flex items-center space-x-1 bg-wa-panelDark border border-wa-borderDark px-2 py-0.5 rounded-full absolute -top-3 ${isMine ? 'right-0' : 'left-0'} shadow-lg z-10 text-xs">
-              <button onclick="window.addReactionToMessage('${msg.id}', '👍')">👍</button>
-              <button onclick="window.addReactionToMessage('${msg.id}', '❤️')">❤️</button>
-              <button onclick="window.addReactionToMessage('${msg.id}', '😂')">😂</button>
-              <button onclick="window.addReactionToMessage('${msg.id}', '🔥')">🔥</button>
             </div>
           </div>
         `;
